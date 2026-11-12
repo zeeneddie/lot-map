@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Catalog, Config, Entry, StationId, Status } from '../types'
 import type { Source } from './catalog'
-import { ASK_WHY, EMPTY_CATALOG, WHY_TOOLS, mentions, splitClaudeMd, statedWhy, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
+import { ASK_WHY, EMPTY_CATALOG, mcpStatusOf, WHY_TOOLS, mentions, splitClaudeMd, statedWhy, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -491,6 +491,11 @@ export const register: Register = (on, options) => {
     })
     try {
       const ran = await next(e)
+      // A ToolSearch result names the MCP servers that failed or are still connecting: read along, nothing asked.
+      if (e.tool === 'ToolSearch') {
+        const status = mcpStatusOf(ran.result)
+        if (status !== undefined) await quietly(() => update($, catalog, c => ({ ...c, mcpStatus: status })))
+      }
       const wasRefused = ran.deny !== undefined || (e.tool_use_id !== undefined && refused.delete(e.tool_use_id))
       const task = wasRefused || ran.isError === true ? undefined : taskOf(ran.result)
       if (task !== undefined) {

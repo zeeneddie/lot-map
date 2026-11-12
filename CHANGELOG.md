@@ -9,6 +9,10 @@ What changed in each version of lot-map, newest first. To get a new version, see
 
 
 
+
+## 0.5.2-mq.13 (fork zeeneddie, branch feat/werkinzicht)
+
+- Start-up faults: a ToolSearch result carries `failed_mcp_servers` (name, error code, error) and `pending_mcp_servers`. The map reads them along, nothing asked, and shows the reason beside the `✕` of a configured server (`niet geladen: ECONNREFUSED …`), and lists failed servers the configuration on disk does not hold (such as claude.ai connectors). Without `--debug` Claude Code writes no debug log, so this is the only place the reason reaches a mod.
 ## 0.5.2-mq.12 (fork zeeneddie, branch feat/werkinzicht)
 
 - `SubagentHandback` and `TaskOutput` land on Agents; any other tool the map does not know stays on Shell but reads `tool: <name>`. A station of its own was tried and dropped: an eleventh station breaks the ring's mirrored pairs that the `you-bottom` layout relies on (a test caught it).

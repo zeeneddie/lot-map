@@ -69,6 +69,8 @@ export type Catalog = {
   chain?: Record<string, string[]>
   /** Instruction and memory files in the first message's context (names only), such as the memory index. */
   context?: string[]
+  /** MCP servers that did not connect or are still connecting, as a ToolSearch result reported them. */
+  mcpStatus?: { failed: { name: string; why: string }[]; pending: string[] }
 }
 
 export type LoadedFile = { file: string; kind: string; reason: string; parent?: string }

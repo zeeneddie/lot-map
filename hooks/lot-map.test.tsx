@@ -4,7 +4,7 @@ import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
 import { stringsFor } from './text'
-import { EMPTY_CATALOG, columnLines, frontName, hookDecls, matcherFits, mcpNames, mentions, missing, scriptOf, skillFileOf, splitClaudeMd, statedWhy, tail, whyOf } from './catalog'
+import { EMPTY_CATALOG, mcpStatusOf, columnLines, frontName, hookDecls, matcherFits, mcpNames, mentions, missing, scriptOf, skillFileOf, splitClaudeMd, statedWhy, tail, whyOf } from './catalog'
 
 const PANE = {
   plugin: 'lot-map',
@@ -963,4 +963,21 @@ test('the memory index in the context shows as loaded, and the notes opened from
   expect(text).toContain('    ▶ project-y.md')
   // Notes are not repeated in the list of steering files.
   expect(text.filter(l => l.includes('feedback-x.md')).length).toBe(1)
+})
+
+test('an MCP server that did not connect shows why, read along from a ToolSearch result', async ($, on) => {
+  expect(mcpStatusOf({ matches: [] })).toBeUndefined()
+  expect(mcpStatusOf({ failed_mcp_servers: [{ name: 'penpot', errorCode: 'ECONNREFUSED', error: 'Unable to connect' }], pending_mcp_servers: ['slow'] }))
+    .toEqual({ failed: [{ name: 'penpot', why: 'ECONNREFUSED Unable to connect' }], pending: ['slow'] })
+
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.list', () => ({ value: [{ name: 'mcp__context7__q', description: '', mcp: true }] }))
+  on('command.list', () => ({ value: [] }))
+  on('tool.call', () => ({ result: { matches: [], query: 'x', total_deferred_tools: 3, failed_mcp_servers: [{ name: 'penpot', errorCode: 'ECONNREFUSED' }, { name: 'claude.ai Gmail', error: 'auth' }] } }))
+  await $.tool.call({ tool: 'ToolSearch', query: 'select:x', max_results: 1 } as never)
+
+  const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 90 }, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /✕ penpot · niet verbonden: ECONNREFUSED/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /✕ claude\.ai Gmail · niet verbonden: auth/ })).toBeDefined()
+  await ui.unmount()
 })

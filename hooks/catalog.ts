@@ -125,7 +125,19 @@ export function columnLines(catalog: Catalog, lit: Set<string>, width: number, r
     const on = lit.has(`mcp:${server}`)
     lines.push({ text: item(on ? '▶' : ' ', server, String(n)), lit: on, dim: !on })
   }
-  for (const server of gone.mcp) lines.push({ text: item('✕', server, 'geconfigureerd, niet geladen'), lit: false, warn: true })
+  // Configured and not loaded, with the reason when a ToolSearch result gave one; failed servers a ToolSearch named
+  // that the configuration on disk does not (claude.ai connectors, for one) are shown too.
+  const failed = catalog.mcpStatus?.failed ?? []
+  const pending = catalog.mcpStatus?.pending ?? []
+  const reasonFor = (s: string): string | undefined => failed.find(f => f.name === s || toolSpelling(f.name) === toolSpelling(s))?.why
+  for (const server of gone.mcp) {
+    const why = reasonFor(server)
+    const waiting = pending.includes(server)
+    lines.push({ text: item('✕', server, why ? `niet geladen: ${why}` : waiting ? 'nog aan het verbinden' : 'geconfigureerd, niet geladen'), lit: false, warn: true })
+  }
+  for (const f of failed.filter(f => !gone.mcp.some(s => s === f.name || toolSpelling(s) === toolSpelling(f.name)))) {
+    lines.push({ text: item('✕', f.name, `niet verbonden: ${f.why}`), lit: false, warn: true })
+  }
 
   const part = (title: string, items: readonly Item[], key: (i: Item) => string, show: (i: Item) => boolean, room: number, absent: readonly string[] = [], why = ''): void => {
     lines.push({ text: '', lit: false })
@@ -365,3 +377,18 @@ export function statedWhy(text: string): string | undefined {
 /** The instruction the askWhy option adds at the end of the system prompt. */
 export const ASK_WHY =
   'Before each Skill, Agent or Workflow tool call, write one short line that starts with "Waarom:" and names what made you choose it: the user\'s request, a rule in memory or in AGENTS.md/CLAUDE.md, a skill\'s or agent\'s description, or your own judgement. One line, no more.'
+
+// ---- start-up faults: MCP servers that did not connect ---------------------------------------------------
+
+/** What a ToolSearch result says about MCP servers that failed or are still pending; undefined when it says nothing. */
+export function mcpStatusOf(result: unknown): { failed: { name: string; why: string }[]; pending: string[] } | undefined {
+  if (result === null || typeof result !== 'object') return undefined
+  const r = result as { failed_mcp_servers?: unknown; pending_mcp_servers?: unknown }
+  const failed = Array.isArray(r.failed_mcp_servers)
+    ? (r.failed_mcp_servers as { name?: unknown; errorCode?: unknown; error?: unknown }[])
+        .filter(f => typeof f?.name === 'string')
+        .map(f => ({ name: f.name as string, why: clean([f.errorCode, f.error].filter(x => typeof x === 'string' && x).join(' '), 80) || 'mislukt' }))
+    : []
+  const pending = Array.isArray(r.pending_mcp_servers) ? (r.pending_mcp_servers as unknown[]).filter((p): p is string => typeof p === 'string') : []
+  return failed.length || pending.length || 'failed_mcp_servers' in r || 'pending_mcp_servers' in r ? { failed, pending } : undefined
+}
