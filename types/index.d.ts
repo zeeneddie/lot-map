@@ -20,6 +20,8 @@ export type Entry = {
   task?: string
   /** A moment the map marks: the model changed, or the answer is ready. */
   mark?: 'switch' | 'done'
+  /** What the call used, for the loaded column to light up: `skill:x`, `agent:x`, `file:a/b`, `mcp:x`. */
+  ref?: string
 }
 
 export type Board = {
@@ -39,8 +41,22 @@ export type Board = {
   switchedAt?: number
 }
 
+/** One name in the loaded column, with where it comes from. */
+export type Item = { name: string; source: string }
+
+/** What the session has loaded: read from the engine's own lists, never from a model. */
+export type Catalog = {
+  tools: number
+  /** Tools per MCP server. */
+  mcp: Record<string, number>
+  commands: Item[]
+  agents: Item[]
+  /** Instruction and memory files the session read (last two parts of the path). */
+  files: string[]
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'lot-map': { board: Shaped<Board> }
+    'lot-map': { board: Shaped<Board>; catalog: Shaped<Catalog> }
   }
 }

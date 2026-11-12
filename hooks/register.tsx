@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Board, Entry, StationId, Status } from '../types'
+import type { Board, Catalog, Entry, StationId, Status } from '../types'
+import { EMPTY_CATALOG, activeRefs, columnLines, fromCommands, fromTools, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -10,7 +11,14 @@ const KEEP = 80
 const CREW = 12
 
 // Change the tag when a field of Entry or Board changes: it declines what an earlier version stored.
-const board = atom({ plugin: 'lot-map', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-3' })
+const board = atom({ plugin: 'lot-map', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-4' })
+
+// What the session has loaded, for the column beside the feed. Read from the engine's lists alone.
+const catalog = atom({ plugin: 'lot-map', key: 'catalog' } as const, EMPTY_CATALOG as Catalog, { shape: 'catalog-1' })
+
+/** Below this many columns the two parts of the pane stack instead of standing side by side. */
+const SIDE_BY_SIDE = 100
+const LEFT = 40
 
 const newId = (now: number): string => `${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
@@ -34,6 +42,7 @@ type Start = {
   uncounted?: boolean
   startedAt?: number
   endedAt?: number
+  ref?: string
   patch?: Partial<Pick<Board, 'model' | 'step' | 'switchedAt'>>
 }
 
@@ -60,6 +69,7 @@ async function begin($: EngineInterface, start: Start): Promise<string | undefin
       ...(start.status !== undefined ? { endedAt: start.endedAt ?? now } : {}),
       ...(start.agentId !== undefined ? { agentId: start.agentId } : {}),
       ...(start.mark !== undefined ? { mark: start.mark } : {}),
+      ...(start.ref !== undefined ? { ref: start.ref } : {}),
     }
     await update($, board, b => ({
       ...b,
@@ -116,6 +126,18 @@ async function settle($: EngineInterface, task: string, status: Status): Promise
   })
 }
 
+/** Reads the engine's lists of tools and commands again; draws again only when they changed. */
+async function refresh($: EngineInterface): Promise<void> {
+  await quietly(async () => {
+    const tools = await $.tool.list()
+    const commands = await $.command.list()
+    await update($, catalog, c => {
+      const next = { ...c, ...fromTools(tools), commands: fromCommands(commands) }
+      return sameCatalog(c, next) ? c : next
+    })
+  })
+}
+
 /** How full the context window is, as the status line has it; costs nothing. */
 async function contextOf($: EngineInterface): Promise<Pick<Board, 'context'>> {
   const percent = await quietly(async () => (await $.session.usage()).context.percent)
@@ -165,6 +187,17 @@ export const register: Register = (on, options) => {
       const kept = await $.store.get(modelKey)
       if (lastModel === undefined && typeof kept === 'string') lastModel = kept
     })
+    await refresh($)
+    return next(e)
+  })
+
+  // An agent type offered to the model: noted for the loaded column, and handed on exactly as it came.
+  on('agent.offer', async ($, e, next) => {
+    await quietly(() =>
+      update($, catalog, c =>
+        c.agents.some(a => a.name === e.agent) ? c : { ...c, agents: [...c.agents, { name: e.agent, source: e.source }] },
+      ),
+    )
     return next(e)
   })
 
@@ -179,6 +212,7 @@ export const register: Register = (on, options) => {
       // A background task reporting back is no message of the person's.
       if (notice.status !== undefined) await settle($, notice.id, notice.status)
     } else if (e.agentId === undefined && e.text !== '') {
+      await refresh($)
       // A new message clears what went wrong on the way to the last answer.
       await quietly(() => update($, board, b => (b.faults === undefined ? b : { ...b, faults: {} })))
       await begin($, { station: 'you', label: t.newMessage, from: 'inbound', status: 'ok' })
@@ -250,8 +284,16 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     const id = await quietly(async () => {
-      const seen = classify(e.tool, e as unknown as Record<string, unknown>, setup)
-      return begin($, { ...seen, ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
+      // The engine's lists may still be empty at session.start: the first call reads them again.
+      if ((await read($, catalog)).tools === 0) await refresh($)
+      const input = e as unknown as Record<string, unknown>
+      const seen = classify(e.tool, input, setup)
+      const ref = refOf(e.tool, input)
+      const file = steeringFile(e.tool, input)
+      if (file !== undefined) {
+        await update($, catalog, c => (c.files.includes(file) ? c : { ...c, files: [...c.files, file].slice(-24) }))
+      }
+      return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
     try {
       const ran = await next(e)
@@ -314,7 +356,7 @@ export const register: Register = (on, options) => {
       const now = await $.clock.now()
       await update($, board, b => {
         if (b.entries.some(x => x.station === 'skills' && x.status === 'run' && x.label === e.skill)) return b
-        const entry: Entry = { id: newId(now), station: 'skills', label: e.skill, from: 'core', startedAt: now, endedAt: now, status: 'ok' }
+        const entry: Entry = { id: newId(now), station: 'skills', label: e.skill, from: 'core', startedAt: now, endedAt: now, status: 'ok', ref: `skill:${e.skill}` }
         return { ...b, entries: [...b.entries, entry].slice(-KEEP), counts: { ...b.counts, skills: (b.counts.skills ?? 0) + 1 } }
       })
     })
@@ -351,13 +393,36 @@ export const register: Register = (on, options) => {
     const feed = rows.length > 0 ? rows : [<Text dimColor>{t.nothingYet}</Text>]
     const current = <Text mono size="footnote">{describeNow(state, t)}</Text>
 
+    const loaded = await read($, catalog)
+    const bodyCols = e.props?.bodyColumns ?? 80
+    const bodyRows = e.props?.scroll?.bodyRows ?? 40
+    const beside = bodyCols >= SIDE_BY_SIDE
+    const lines = columnLines(loaded, activeRefs(state.entries), beside ? LEFT - 2 : bodyCols - 2, beside ? bodyRows : Math.floor(bodyRows / 2))
+    const side = (
+      <Box flexDirection="column" width={beside ? LEFT : undefined}>
+        {lines.map(l => (
+          <Text mono size="footnote" bold={l.head === true} color={l.lit ? 'claude' : undefined} dimColor={l.dim === true}>
+            {l.text === '' ? ' ' : l.text}
+          </Text>
+        ))}
+      </Box>
+    )
+    const both = (work: typeof feed) => (
+      <Box flexDirection={beside ? 'row' : 'column'} gap={1}>
+        {side}
+        <Box flexDirection="column" flexGrow={1}>
+          {work}
+        </Box>
+      </Box>
+    )
+
     if (e.surface === 'terminal') {
       const tally = STATIONS.filter(s => (state.counts[s.id] ?? 0) > 0).map(s => `${t.stations[s.id]} ${state.counts[s.id]}`).join(' · ')
       return (
         <Box flexDirection="column">
           {current}
           <Text dimColor>{tally === '' ? t.noCounts : tally}</Text>
-          {feed}
+          {both(feed)}
         </Box>
       )
     }
@@ -367,7 +432,7 @@ export const register: Register = (on, options) => {
       <Box flexDirection="column">
         <Svg source={drawMap(state, now, setup)} alt={`${t.title}. ${describeNow(state, t)}`} />
         {current}
-        {feed}
+        {both(feed)}
       </Box>
     )
   })

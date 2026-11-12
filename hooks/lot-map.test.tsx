@@ -781,3 +781,32 @@ test('a background task that failed leaves a fault on its station', { options: O
   await ui.unmount()
   expect(source.split('font-weight="700"').length - 1).toBe(1)
 })
+
+// ---- the loaded column (fork zeeneddie, werkinzicht) -------------------------------------------
+
+test('the loaded column lists what the engine has and lights what the work uses', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.list', () => ({ value: [{ name: 'Read', description: '', mcp: false }, { name: 'mcp__penpot__draw', description: '', mcp: true }] }))
+  on('command.list', () => ({
+    value: [
+      { name: 'repo-analyse', description: '', source: 'user' },
+      { name: 'review', description: '', source: 'plugin', plugin: 'crit' },
+      { name: 'help', description: '', source: 'builtin' },
+    ],
+  }))
+  on('tool.call', () => ({ result: {} }))
+
+  await $.tool.call({ tool: 'Skill', skill: 'repo-analyse' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/w/repo/AGENTS.md' })
+
+  const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 120 }, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^GELADEN$/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /^Tools 2 · MCP 1$/ }))?.text).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /repo-analyse · user$/ }))?.text).toContain('▶')
+  expect((await ui.find({ type: 'Text', text: /review · plugin crit$/ }))?.text).not.toContain('▶')
+  // Built-in commands are counted, not named.
+  expect((await ui.find({ type: 'Text', text: /^user 1 · plugin 1 · builtin 1$/ }))).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /help · builtin/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /repo\/AGENTS\.md/ }))?.text).toContain('▶')
+  await ui.unmount()
+})

@@ -2,6 +2,13 @@
 
 What changed in each version of lot-map, newest first. To get a new version, see [Updating](README.md#updating).
 
+
+## 0.5.2-mq.1 (fork zeeneddie, branch feat/werkinzicht)
+
+- The pane has a second column, **GELADEN**: tools (and per MCP server), skills and commands by source, agent types as the engine offers them, and the instruction and memory files the session read. Built-in commands are counted, not named.
+- What the work in the feed uses lights up in that column (`▶`): a skill, an agent type, an MCP server, an instruction file.
+- Read from `$.tool.list()`, `$.command.list()` and `agent.offer` alone, handed on unchanged: no model is asked and nothing is added to the conversation.
+- Side by side from 100 columns, one under the other below that.
 ## 0.5.2 (2026-11-12)
 
 - Fixed: for a web address with an IPv6 host and an `@` in its path or query, the label could show the text after the `@` instead of the host: `https://[::1]/x?tok=@secret` was drawn as `secret`. It now shows `[::1]`, and `[::1]:8080` keeps its port. Contributed by markedwardcampos. (#29)
