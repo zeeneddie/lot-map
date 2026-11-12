@@ -4,7 +4,7 @@ import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
 import { stringsFor } from './text'
-import { EMPTY_CATALOG, columnLines, frontName, hookDecls, matcherFits, mcpNames, missing, scriptOf, skillFileOf, tail, whyOf } from './catalog'
+import { EMPTY_CATALOG, columnLines, frontName, hookDecls, matcherFits, mcpNames, mentions, missing, scriptOf, skillFileOf, splitClaudeMd, statedWhy, tail, whyOf } from './catalog'
 
 const PANE = {
   plugin: 'lot-map',
@@ -886,4 +886,19 @@ test('the chain: files a skill made the session read, and the hook scripts that 
   expect(text).toContain('  PreToolUse Edit|Write|MultiEdit|NotebookEdit · hooks/branch-guard.sh')
   expect(text).toContain('▶ repo-analyse · 1 gelezen')
   expect(text).toContain('    → SKILL.md')
+})
+
+test('why, source 1: where the name of a skill or agent stood, as a fact about the texts', () => {
+  const md = 'Contents of /w/p/CLAUDE.md (project):\n@AGENTS.md\nContents of /h/.claude/projects/x/memory/MEMORY.md (memory):\n- Repo-analyse = skill repo-analyse (11-11)\n'
+  const files = splitClaudeMd(md)
+  expect(files.map(f => f.label)).toEqual(['p/CLAUDE.md', 'memory/MEMORY.md'])
+  const sources = [{ label: 'jouw prompt', text: 'analyseer repo lot-map' }, ...files, { label: 'herinnering skill_listing', text: '- repo-analyse: Analyseer een externe repo …' }]
+  expect(mentions('repo-analyse', sources)).toEqual(['memory/MEMORY.md: "- Repo-analyse = skill repo-analyse (11-11)"', 'herinnering skill_listing: "- repo-analyse: Analyseer een externe repo …"'])
+  // A whole word only: `repo-analyses` is not `repo-analyse`.
+  expect(mentions('repo-analyse', [{ label: 'x', text: 'de repo-analyses van vandaag' }])).toEqual([])
+  expect(mentions('Explore', [{ label: 'jouw prompt', text: 'start een Explore-subagent' }])).toEqual([])
+  expect(mentions('Explore', [{ label: 'jouw prompt', text: 'start een Explore subagent' }])).toEqual(['jouw prompt: "start een Explore subagent"'])
+  expect(statedWhy('Ik laad de skill.\nWaarom: de gebruiker vroeg erom.\n')).toBe('de gebruiker vroeg erom.')
+  expect(statedWhy('**Waarom:** regel in MEMORY.md')).toBe('regel in MEMORY.md')
+  expect(statedWhy('geen reden')).toBeUndefined()
 })

@@ -1,6 +1,6 @@
 {
   "name": "lot-map",
-  "version": "0.5.2-mq.5",
+  "version": "0.5.2-mq.6",
   "description": "A live map beside the chat: memory, files, shell, web, model, agents, skills and hooks light up as they are used",
   "author": {
     "name": "Aleksei Volodin",
@@ -10,7 +10,16 @@
   "repository": "https://github.com/alexeyw/lot-map",
   "supportUrl": "https://github.com/alexeyw/lot-map/issues",
   "privacyPolicyUrl": "https://github.com/alexeyw/lot-map/blob/main/PRIVACY.md",
-  "keywords": ["mod", "map", "visualization", "activity", "tool calls", "hooks", "subagents", "memory"],
+  "keywords": [
+    "mod",
+    "map",
+    "visualization",
+    "activity",
+    "tool calls",
+    "hooks",
+    "subagents",
+    "memory"
+  ],
   "license": "MIT",
   "icon": "./.claude-plugin/icon.png",
   "types": "./types/index.d.ts",
@@ -121,6 +130,12 @@
       ],
       "default": "you-top",
       "description": "Where you are on the map: at the top, or at the bottom with the network and the browser at the top."
+    },
+    "askWhy": {
+      "type": "boolean",
+      "title": "Ask the model why",
+      "default": false,
+      "description": "Adds one line to the system prompt asking the model to write a line starting with 'Waarom:' before each Skill, Agent or Workflow call; the map shows it. Costs a few tokens per such call and changes the model's behaviour slightly."
     }
   }
 }

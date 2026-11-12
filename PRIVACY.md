@@ -29,7 +29,7 @@ To remove what it keeps, uninstall the plugin.
 
 ## Fork zeeneddie (feat/werkinzicht)
 
-This fork reads files, the upstream mod does not: `~/.claude.json`, `.mcp.json`, the agent and skill folders, the merged settings and whether the instruction files and hook scripts exist. It keeps names only (server, agent, skill, hook event and script, the last two parts of a path) in the session's state; values such as an MCP server's command or environment are read past and never kept. Since 0.5.2-mq.4 it also keeps, for a Skill, Agent or Workflow call, the last ±240 characters of what the model wrote and thought just before it, shown in the pane and kept in the session's state only. It still makes no network requests, runs no processes and calls no model.
+This fork reads files, the upstream mod does not: `~/.claude.json`, `.mcp.json`, the agent and skill folders, the merged settings and whether the instruction files and hook scripts exist. It keeps names only (server, agent, skill, hook event and script, the last two parts of a path) in the session's state; values such as an MCP server's command or environment are read past and never kept. Since 0.5.2-mq.4 it also keeps, for a Skill, Agent or Workflow call, the last ±240 characters of what the model wrote and thought just before it, shown in the pane and kept in the session's state only. Since 0.5.2-mq.6 it holds, in the module's memory only (never in state or on disk), the latest prompt, the system prompt sections, the context blocks and reminders, to look up where a skill's or agent's name stood; it shows one line of that per call. With `askWhy` on it adds one line to the system prompt. It still makes no network requests, runs no processes and calls no model.
 
 ## What it does not do
 

@@ -298,3 +298,53 @@ export function matcherFits(matcher: string, tool: string): boolean {
     return matcher.split('|').includes(tool)
   }
 }
+
+// ---- why, source 1: where the name of a skill or agent stood before the call -------------------------------
+
+/** A text the model had in front of it, with what to call it. */
+export type Source = { label: string; text: string }
+
+/** The instruction files inside the `claudeMd` block, each under its own label (the last two parts of its path). */
+export function splitClaudeMd(text: string): Source[] {
+  const out: Source[] = []
+  const re = /^Contents of (\S+)/gm
+  const marks = [...text.matchAll(re)]
+  if (marks.length === 0) return text ? [{ label: 'CLAUDE.md', text }] : []
+  marks.forEach((m, i) => {
+    const start = m.index ?? 0
+    const end = marks[i + 1]?.index ?? text.length
+    out.push({ label: lastTwo(m[1] ?? 'CLAUDE.md'), text: text.slice(start, end) })
+  })
+  return out
+}
+
+/** The name as a whole word: `repo-analyse` matches in `skill repo-analyse.` but not in `repo-analyses`. */
+const wordRe = (name: string): RegExp => new RegExp(`(^|[^A-Za-z0-9_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9_-])`)
+
+/**
+ * Where the name stood, first in the person's prompt, then in what the engine loaded: one line per source, at most
+ * `max`. A fact about the texts, not about the model's reasons — shown as "genoemd in".
+ */
+export function mentions(name: string, sources: readonly Source[], max = 3): string[] {
+  if (!name) return []
+  const re = wordRe(name)
+  const out: string[] = []
+  for (const s of sources) {
+    const line = s.text.split('\n').find(l => re.test(l))
+    if (line === undefined) continue
+    out.push(`${s.label}: "${tail(line.trim(), 110)}"`)
+    if (out.length >= max) break
+  }
+  return out
+}
+
+/** The last line the model wrote that starts with `Waarom:` (asked for by the askWhy option), or undefined. */
+export function statedWhy(text: string): string | undefined {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => /^\**Waarom:?\**/i.test(l))
+  const last = lines[lines.length - 1]
+  return last ? tail(last.replace(/^\**Waarom:?\**\s*/i, ''), 200) : undefined
+}
+
+/** The instruction the askWhy option adds at the end of the system prompt. */
+export const ASK_WHY =
+  'Before each Skill, Agent or Workflow tool call, write one short line that starts with "Waarom:" and names what made you choose it: the user\'s request, a rule in memory or in AGENTS.md/CLAUDE.md, a skill\'s or agent\'s description, or your own judgement. One line, no more.'

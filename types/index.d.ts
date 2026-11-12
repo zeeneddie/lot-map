@@ -24,6 +24,8 @@ export type Entry = {
   ref?: string
   /** For a skill, agent or workflow: what the model wrote and thought just before it called it. */
   why?: string
+  /** For a skill, agent or workflow: where its name stood before the call (the prompt, an instruction file, memory, the system prompt). */
+  source?: string
 }
 
 export type Board = {

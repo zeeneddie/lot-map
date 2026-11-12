@@ -7,6 +7,12 @@ What changed in each version of lot-map, newest first. To get a new version, see
 
 
 
+
+## 0.5.2-mq.6 (fork zeeneddie, branch feat/werkinzicht)
+
+- Why, source 1: under a Skill or Agent row, `↳ genoemd in:` where its name stood before the call — the person's prompt, an instruction file or memory (from `prompt.context`, by file), a reminder such as the skill list (`prompt.attachment`), or a system prompt section (`prompt.compose`), with the line itself. A fact about the texts, not about the model's reasons; `nergens genoemd: eigen keuze van het model` when it stood nowhere. Those texts are kept in the module only, never in state.
+- Option `askWhy` (default off): adds one line to the system prompt asking for a `Waarom:` line before each Skill, Agent or Workflow call; the feed shows it. Costs a few tokens per such call and changes the model's behaviour slightly.
+- Measured and documented (platform.claude.com/docs/en/build-with-claude/thinking): the raw chain of thought is never returned; only a summary, so source 3 stays a summary.
 ## 0.5.2-mq.5 (fork zeeneddie, branch feat/werkinzicht)
 
 - Layer 3, the chain: a section **Keten (skill → bestanden)** lists, per skill, the files read from that skill's own folder.

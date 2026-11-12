@@ -2,7 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Catalog, Config, Entry, StationId, Status } from '../types'
-import { EMPTY_CATALOG, WHY_TOOLS, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
+import type { Source } from './catalog'
+import { ASK_WHY, EMPTY_CATALOG, WHY_TOOLS, mentions, splitClaudeMd, statedWhy, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -44,6 +45,7 @@ type Start = {
   endedAt?: number
   ref?: string
   why?: string
+  source?: string
   patch?: Partial<Pick<Board, 'model' | 'step' | 'switchedAt'>>
 }
 
@@ -72,6 +74,7 @@ async function begin($: EngineInterface, start: Start): Promise<string | undefin
       ...(start.mark !== undefined ? { mark: start.mark } : {}),
       ...(start.ref !== undefined ? { ref: start.ref } : {}),
       ...(start.why !== undefined ? { why: start.why } : {}),
+      ...(start.source !== undefined ? { source: start.source } : {}),
     }
     await update($, board, b => ({
       ...b,
@@ -237,6 +240,20 @@ export const register: Register = (on, options) => {
   // until tool.call picks it up. Read from the stream of turn.step, which is handed on chunk for chunk.
   const reasons = new Map<string, string>()
 
+  // What the model had in front of it, to find where a skill's or agent's name stood (why, source 1). Kept in the
+  // module only, never in state: the system prompt and the instruction files are large, and only names are looked up.
+  const askWhy = (options as Record<string, unknown> | undefined)?.askWhy === true
+  let lastPrompt = ''
+  let systemSections: Source[] = []
+  let contextSources: Source[] = []
+  const attachments = new Map<string, string>()
+  const sourcesNow = (): Source[] => [
+    ...(lastPrompt ? [{ label: 'jouw prompt', text: lastPrompt }] : []),
+    ...contextSources,
+    ...[...attachments].map(([type, text]) => ({ label: `herinnering ${type}`, text })),
+    ...systemSections,
+  ]
+
   // The model the main loop last ran on: in this session, or else in the last session in this folder.
   // The one thing the map keeps between sessions, and only its name.
   let lastModel: string | undefined
@@ -266,6 +283,37 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // The system prompt as composed: kept to look names up in, and with askWhy one line added at the end asking the
+  // model to say why before it calls a skill, an agent or a workflow.
+  on('prompt.compose', async ($, e, next) => {
+    const composed = await next(e)
+    await quietly(async () => {
+      systemSections = composed.sections.map(s => ({ label: `systeemprompt ${s.id}`, text: s.text }))
+    })
+    if (!askWhy) return composed
+    return { sections: [...composed.sections, { id: 'lot-map:waarom', text: ASK_WHY, scope: 'session' as const }] }
+  })
+
+  // The context of the first message: the instruction files and memory, each under its own name.
+  on('prompt.context', async ($, e, next) => {
+    const ctx = await next(e)
+    await quietly(async () => {
+      contextSources = ctx.blocks.flatMap(b => (b.name === 'claudeMd' ? splitClaudeMd(b.text) : [{ label: b.name, text: b.text }]))
+    })
+    return ctx
+  })
+
+  // Reminders the engine adds (among them the list of skills with their descriptions): kept by type, latest wins.
+  on('prompt.attachment', async ($, e, next) => {
+    const r = await next(e)
+    await quietly(async () => {
+      const type = (e as { type?: unknown }).type
+      if (typeof type === 'string' && typeof r.text === 'string' && r.text) attachments.set(type, r.text)
+      if (attachments.size > 30) attachments.delete(attachments.keys().next().value as string)
+    })
+    return r
+  })
+
   // An agent type offered to the model: noted for the loaded column, and handed on exactly as it came.
   on('agent.offer', async ($, e, next) => {
     await quietly(() =>
@@ -287,6 +335,7 @@ export const register: Register = (on, options) => {
       // A background task reporting back is no message of the person's.
       if (notice.status !== undefined) await settle($, notice.id, notice.status)
     } else if (e.agentId === undefined && e.text !== '') {
+      lastPrompt = e.text
       await refresh($)
       // A new message clears what went wrong on the way to the last answer.
       await quietly(() => update($, board, b => (b.faults === undefined ? b : { ...b, faults: {} })))
@@ -329,7 +378,8 @@ export const register: Register = (on, options) => {
         if (c.kind === 'thinking' && typeof c.text === 'string') thinking += c.text
         else if (c.kind === 'text' && typeof c.text === 'string') text += c.text
         else if (c.kind === 'tool' && typeof c.id === 'string' && typeof c.name === 'string' && WHY_TOOLS.has(c.name)) {
-          const why = whyOf(thinking, text)
+          const stated = statedWhy(text)
+          const why = stated !== undefined ? `Waarom: ${stated}` : whyOf(thinking, text)
           if (why !== undefined) reasons.set(c.id, why)
           if (reasons.size > 50) reasons.delete(reasons.keys().next().value as string)
         }
@@ -399,7 +449,10 @@ export const register: Register = (on, options) => {
       }
       const why = e.tool_use_id !== undefined ? reasons.get(e.tool_use_id) : undefined
       if (e.tool_use_id !== undefined) reasons.delete(e.tool_use_id)
-      return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
+      const named = e.tool === 'Skill' ? input.skill : e.tool === 'Agent' ? input.subagent_type || 'general-purpose' : undefined
+      const found = typeof named === 'string' ? mentions(named, sourcesNow()) : []
+      const source = found.length ? found.join(' · ') : typeof named === 'string' ? 'nergens genoemd: eigen keuze van het model' : undefined
+      return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(source !== undefined ? { source } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
     try {
       const ran = await next(e)
@@ -495,13 +548,20 @@ export const register: Register = (on, options) => {
           {line}
         </Text>
       )
-      if (entry.why === undefined) return row
+      if (entry.why === undefined && entry.source === undefined) return row
       return (
         <Box flexDirection="column">
           {row}
-          <Text mono size="footnote" dimColor>
-            {`  ↳ waarom (eigen woorden model): ${entry.why}`}
-          </Text>
+          {entry.source !== undefined ? (
+            <Text mono size="footnote" dimColor>
+              {`  ↳ genoemd in: ${entry.source}`}
+            </Text>
+          ) : null}
+          {entry.why !== undefined ? (
+            <Text mono size="footnote" dimColor>
+              {`  ↳ waarom (eigen woorden model): ${entry.why}`}
+            </Text>
+          ) : null}
         </Box>
       )
     })
