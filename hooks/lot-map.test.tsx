@@ -923,3 +923,22 @@ for (const withId of [true, false]) {
     await ui.unmount()
   })
 }
+
+test('the stated reason reaches the row also when the tool call starts before the stream gets to it', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.list', () => ({ value: [] }))
+  on('command.list', () => ({ value: [] }))
+  on('tool.call', () => ({ result: {} }))
+  on('turn.step', async function* () {
+    yield { kind: 'text', index: 0, text: 'Waarom: je vroeg erom.\n' } as never
+    yield { kind: 'tool', index: 1, id: 'tu-9', name: 'Agent' } as never
+    return { turnId: 't1', index: 0, answer: '', toolUses: [] } as never
+  })
+  // The engine started the agent first; the stream reaches its tool chunk afterwards.
+  await $.tool.call({ tool: 'Agent', subagent_type: 'Explore', description: 'Tel', prompt: 'x', tool_use_id: 'tu-9' } as never)
+  for await (const _ of $.turn.step(STEP)) void _
+
+  const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 90 }, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /↳ waarom \(eigen woorden model\): Waarom: je vroeg erom\./ }))).toBeDefined()
+  await ui.unmount()
+})

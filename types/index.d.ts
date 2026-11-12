@@ -24,6 +24,8 @@ export type Entry = {
   ref?: string
   /** For a skill, agent or workflow: what the model wrote and thought just before it called it. */
   why?: string
+  /** The call's tool_use_id, so a reason that arrives after the row was made can still find it. */
+  useId?: string
   /** For a skill, agent or workflow: where its name stood before the call (the prompt, an instruction file, memory, the system prompt). */
   source?: string
 }

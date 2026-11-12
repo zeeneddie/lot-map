@@ -46,6 +46,7 @@ type Start = {
   ref?: string
   why?: string
   source?: string
+  useId?: string
   patch?: Partial<Pick<Board, 'model' | 'step' | 'switchedAt'>>
 }
 
@@ -75,6 +76,7 @@ async function begin($: EngineInterface, start: Start): Promise<string | undefin
       ...(start.ref !== undefined ? { ref: start.ref } : {}),
       ...(start.why !== undefined ? { why: start.why } : {}),
       ...(start.source !== undefined ? { source: start.source } : {}),
+      ...(start.useId !== undefined ? { useId: start.useId } : {}),
     }
     await update($, board, b => ({
       ...b,
@@ -393,6 +395,15 @@ export const register: Register = (on, options) => {
             kept++
             reasons.set(c.id, why)
             reasonsByTool.set(c.name, why)
+            // The engine may have started the call already: then its row exists and takes the reason now.
+            const useId = c.id
+            await quietly(() =>
+              update($, board, b =>
+                b.entries.some(x => x.useId === useId && x.why === undefined)
+                  ? { ...b, entries: b.entries.map(x => (x.useId === useId && x.why === undefined ? { ...x, why } : x)) }
+                  : b,
+              ),
+            )
           }
           if (reasons.size > 50) reasons.delete(reasons.keys().next().value as string)
         }
@@ -474,7 +485,7 @@ export const register: Register = (on, options) => {
       const named = e.tool === 'Skill' ? input.skill : e.tool === 'Agent' ? input.subagent_type || 'general-purpose' : undefined
       const found = typeof named === 'string' ? mentions(named, sourcesNow()) : []
       const source = found.length ? found.join(' · ') : typeof named === 'string' ? 'nergens genoemd: eigen keuze van het model' : undefined
-      return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(source !== undefined ? { source } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
+      return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(source !== undefined ? { source } : {}), ...(e.tool_use_id !== undefined ? { useId: e.tool_use_id } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
     try {
       const ran = await next(e)
