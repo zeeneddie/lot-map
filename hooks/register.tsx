@@ -304,6 +304,8 @@ export const register: Register = (on, options) => {
     const ctx = await next(e)
     await quietly(async () => {
       contextSources = ctx.blocks.flatMap(b => (b.name === 'claudeMd' ? splitClaudeMd(b.text) : [{ label: b.name, text: b.text }]))
+      const files = contextSources.filter(s => s.label.endsWith('.md')).map(s => s.label)
+      await update($, catalog, c => (JSON.stringify(c.context) === JSON.stringify(files) ? c : { ...c, context: files }))
     })
     return ctx
   })

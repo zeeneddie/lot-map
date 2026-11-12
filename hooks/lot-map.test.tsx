@@ -947,3 +947,20 @@ test('where a name stood fits one line: at most two sources, the rest counted', 
   const s = [1, 2, 3, 4].map(i => ({ label: `bron${i}`, text: `regel met Explore nummer ${i}` }))
   expect(mentions('Explore', s, 2, 70)).toEqual(['bron1: "regel met Explore nummer 1"', 'bron2: "regel met Explore nummer 2"', '+2'])
 })
+
+test('a subagent handing back is the agents, and an unknown tool does not read as a shell command', () => {
+  expect(classify('SubagentHandback', {}, STRANGER)).toEqual({ station: 'agents', label: 'SubagentHandback' })
+  expect(classify('TaskOutput', {}, STRANGER)).toEqual({ station: 'agents', label: 'TaskOutput' })
+  expect(classify('SomethingNew', {}, STRANGER)).toEqual({ station: 'shell', label: 'tool: SomethingNew' })
+})
+
+test('the memory index in the context shows as loaded, and the notes opened from it form the chain', () => {
+  const c = { ...EMPTY_CATALOG, context: ['p/CLAUDE.md', 'memory/MEMORY.md'], files: ['memory/feedback-x.md', 'memory/project-y.md'] }
+  const text = columnLines(c, new Set(['file:memory/project-y.md']), 70, 80).map(l => l.text)
+  expect(text).toContain('◆ memory/MEMORY.md · in context')
+  expect(text).toContain('memory/MEMORY.md · 2 topics gelezen'.padStart('memory/MEMORY.md · 2 topics gelezen'.length + 2))
+  expect(text).toContain('    → feedback-x.md')
+  expect(text).toContain('    ▶ project-y.md')
+  // Notes are not repeated in the list of steering files.
+  expect(text.filter(l => l.includes('feedback-x.md')).length).toBe(1)
+})

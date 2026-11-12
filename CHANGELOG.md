@@ -8,6 +8,11 @@ What changed in each version of lot-map, newest first. To get a new version, see
 
 
 
+
+## 0.5.2-mq.12 (fork zeeneddie, branch feat/werkinzicht)
+
+- `SubagentHandback` and `TaskOutput` land on Agents; any other tool the map does not know stays on Shell but reads `tool: <name>`. A station of its own was tried and dropped: an eleventh station breaks the ring's mirrored pairs that the `you-bottom` layout relies on (a test caught it).
+- The memory index, which reaches the session through the first message's context and not through `InstructionsLoaded`, shows as `◆ … · in context`. The chain shows which memory notes were opened from it (`memory/MEMORY.md · n topics gelezen → …`).
 ## 0.5.2-mq.6 (fork zeeneddie, branch feat/werkinzicht)
 
 - Why, source 1: under a Skill or Agent row, `↳ genoemd in:` where its name stood before the call — the person's prompt, an instruction file or memory (from `prompt.context`, by file), a reminder such as the skill list (`prompt.attachment`), or a system prompt section (`prompt.compose`), with the line itself. A fact about the texts, not about the model's reasons; `nergens genoemd: eigen keuze van het model` when it stood nowhere. Those texts are kept in the module only, never in state.

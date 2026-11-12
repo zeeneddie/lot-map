@@ -155,8 +155,11 @@ export function columnLines(catalog: Catalog, lit: Set<string>, width: number, r
   // Instruction files: what the engine loaded itself, what the session read with a tool, and what exists on disk
   // without either. Loaded by the engine is `◆`, with why and, for an include, which file brought it in.
   const loaded = catalog.loaded ?? []
+  const inContext = catalog.context ?? []
   const cfgFiles = catalog.config?.files ?? []
-  const all = [...new Set([...loaded.map(l => l.file), ...cfgFiles, ...catalog.files])]
+  // Memory topic files are shown under the chain, not here: this list is the files that steer, not every note.
+  const isTopic = (f: string): boolean => /^memory\//.test(f) && !/MEMORY\.md$/.test(f)
+  const all = [...new Set([...loaded.map(l => l.file), ...inContext, ...cfgFiles, ...catalog.files.filter(f => !isTopic(f))])]
   lines.push({ text: '', lit: false })
   lines.push({ text: fit(`Instructies${loaded.length ? `  (engine ${loaded.length})` : ''}`), lit: false, head: true })
   if (all.length === 0) lines.push({ text: '  nog niets', lit: false, dim: true })
@@ -164,16 +167,29 @@ export function columnLines(catalog: Catalog, lit: Set<string>, width: number, r
     const on = lit.has(`file:${name}`)
     const read = catalog.files.includes(name)
     const by = loaded.find(l => l.file === name)
-    const why = [by ? `geladen ${by.kind} ${by.reason}${by.parent ? ` ← ${by.parent}` : ''}` : '', read ? 'gelezen' : ''].filter(Boolean).join(' + ') || 'niet geladen, niet gelezen'
-    lines.push({ text: item(on ? '▶' : by ? '◆' : read ? '✓' : ' ', name, why), lit: on, dim: !on && (by !== undefined || read), warn: !on && !by && !read })
+    const ctx = !by && inContext.includes(name)
+    const why = [by ? `geladen ${by.kind} ${by.reason}${by.parent ? ` ← ${by.parent}` : ''}` : ctx ? 'in context' : '', read ? 'gelezen' : ''].filter(Boolean).join(' + ') || 'niet geladen, niet gelezen'
+    const engine = by !== undefined || ctx
+    lines.push({ text: item(on ? '▶' : engine ? '◆' : read ? '✓' : ' ', name, why), lit: on, dim: !on && (engine || read), warn: !on && !engine && !read })
   }
   if (all.length > Math.max(room, 6)) lines.push({ text: `  +${all.length - Math.max(room, 6)}`, lit: false, dim: true })
 
-  // What a skill made the session read from its own folder.
+  // What a skill made the session read from its own folder, and which memory notes were opened from the index.
   const chain = Object.entries(catalog.chain ?? {})
-  if (chain.length > 0) {
+  const topics = catalog.files.filter(isTopic)
+  if (chain.length > 0 || topics.length > 0) {
     lines.push({ text: '', lit: false })
-    lines.push({ text: 'Keten (skill → bestanden)', lit: false, head: true })
+    lines.push({ text: 'Keten', lit: false, head: true })
+  }
+  if (topics.length > 0) {
+    const index = [...inContext, ...catalog.files].find(f => /memory\/MEMORY\.md$/.test(f)) ?? 'memory/MEMORY.md'
+    lines.push({ text: item(' ', index, `${topics.length} topic${topics.length === 1 ? '' : 's'} gelezen`), lit: false, dim: true })
+    for (const file of topics.slice(-3)) {
+      const on = lit.has(`file:${file}`)
+      lines.push({ text: cut(`    ${on ? '▶' : '→'} ${clean(file.replace(/^memory\//, ''), max)}`), lit: on, dim: !on })
+    }
+  }
+  if (chain.length > 0) {
     for (const [skill, files] of chain.slice(-Math.max(room, 3))) {
       const on = lit.has(`skill:${skill}`)
       lines.push({ text: item(on ? '▶' : ' ', skill, `${files.length} gelezen`), lit: on, dim: !on })

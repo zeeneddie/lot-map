@@ -67,6 +67,8 @@ export type Catalog = {
   loaded?: LoadedFile[]
   /** Files read from a skill's own folder, by skill: what a skill made the session read. */
   chain?: Record<string, string[]>
+  /** Instruction and memory files in the first message's context (names only), such as the memory index. */
+  context?: string[]
 }
 
 export type LoadedFile = { file: string; kind: string; reason: string; parent?: string }

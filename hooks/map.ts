@@ -259,7 +259,13 @@ export function classify(tool: string, input: Record<string, unknown>, setup: Se
       return { station: 'you', label: t.fileForYou }
   }
   const mcp = /^mcp__([^_].*?)__(.+)$/.exec(tool)
-  if (mcp === null) return { station: 'shell', label: tool }
+  if (mcp === null) {
+    // Fork zeeneddie (LM4): a subagent handing its result back belongs to the agents. Any other tool the map does
+    // not know stays on the shell station (a station of its own would break the ring's mirrored pairs, which the
+    // you-bottom layout relies on), but labelled as a tool so it does not read as a shell command.
+    if (tool === 'SubagentHandback' || tool === 'TaskOutput') return { station: 'agents', label: tool }
+    return { station: 'shell', label: `tool: ${tool}` }
+  }
   const [, server = '', name = ''] = mcp
   if (setup.memoryServers.has(server)) {
     // A number, or a short identifier: a longer string under `id` could be anything.
