@@ -22,6 +22,8 @@ export type Entry = {
   mark?: 'switch' | 'done'
   /** What the call used, for the loaded column to light up: `skill:x`, `agent:x`, `file:a/b`, `mcp:x`. */
   ref?: string
+  /** For a skill, agent or workflow: what the model wrote and thought just before it called it. */
+  why?: string
 }
 
 export type Board = {
@@ -39,6 +41,8 @@ export type Board = {
   context?: number
   /** When the model last changed. */
   switchedAt?: number
+  /** How much thinking and visible text came through the model's stream this session (characters), and in how many steps. */
+  seen?: { thinking: number; text: number; steps: number }
 }
 
 /** One name in the loaded column, with where it comes from. */

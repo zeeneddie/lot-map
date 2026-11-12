@@ -5,6 +5,12 @@ What changed in each version of lot-map, newest first. To get a new version, see
 
 
 
+
+## 0.5.2-mq.4 (fork zeeneddie, branch feat/werkinzicht)
+
+- Layer 4, why: under a Skill, Agent or Workflow row the feed shows what the model wrote and thought just before the call (`↳ waarom (eigen woorden model)`, the last ±240 characters of each). Read from the `turn.step` stream, which is handed on chunk for chunk. It is the model's own account, not proof of cause, and labelled so.
+- A line `Stroom: denken … · tekst … tekens in … stappen` measures whether thinking comes through the stream at all.
+- Privacy: that reason text holds part of the model's thinking; it is shown in the pane and kept in the session's state only.
 ## 0.5.2-mq.3 (fork zeeneddie, branch feat/werkinzicht)
 
 - Instruction files the engine loads itself are shown as loaded (`◆`), from `classic.InstructionsLoaded`: the kind (User, Project, Local, Managed), why (session start, include, nested, path match, compaction) and, for an include, the file that brought it in. A file on disk that was neither loaded nor read is marked in the warning colour. This replaces the misleading "not read" for CLAUDE.md.

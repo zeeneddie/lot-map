@@ -237,3 +237,28 @@ export { lastTwo }
 export function sameCatalog(a: Catalog, b: Catalog): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
+
+// ---- why: what the model said and thought just before a skill, agent or workflow call ----------------------
+
+/** The calls whose reason is worth showing: the ones where the model chose a way of working. */
+export const WHY_TOOLS = new Set(['Skill', 'Agent', 'Workflow'])
+
+/** The end of a text, cut at a word, at most `max` characters, on one line. */
+export function tail(text: string, max = 240): string {
+  const one = text.replace(/\s+/g, ' ').trim()
+  if (one.length <= max) return one
+  const cut = one.slice(one.length - max)
+  const space = cut.indexOf(' ')
+  return `…${space > 0 && space < 40 ? cut.slice(space + 1) : cut}`
+}
+
+/**
+ * What the model wrote (visible) and thought just before a call. This is the model's own account, not proof of
+ * why it chose: shown as such, never as cause.
+ */
+export function whyOf(thinking: string, text: string, max = 240): string | undefined {
+  const said = tail(text, max)
+  const thought = tail(thinking, max)
+  const parts = [said ? `zei: ${said}` : '', thought ? `dacht: ${thought}` : ''].filter(Boolean)
+  return parts.length ? parts.join(' · ') : undefined
+}

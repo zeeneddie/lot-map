@@ -4,7 +4,7 @@ import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
 import { stringsFor } from './text'
-import { EMPTY_CATALOG, columnLines, frontName, hookDecls, mcpNames, missing, scriptOf } from './catalog'
+import { EMPTY_CATALOG, columnLines, frontName, hookDecls, mcpNames, missing, scriptOf, tail, whyOf } from './catalog'
 
 const PANE = {
   plugin: 'lot-map',
@@ -853,4 +853,16 @@ test('an instruction file the engine loads itself shows as loaded, with why and 
   expect((await ui.find({ type: 'Text', text: /p\/CLAUDE\.md · geladen Project session_start$/ }))?.text).toContain('◆')
   expect((await ui.find({ type: 'Text', text: /docs\/RULES\.md · geladen Project include ← p\/CLAUDE\.md$/ }))?.text).toContain('◆')
   await ui.unmount()
+})
+
+test('the reason before a skill or agent call is the model own words, cut short, on one line', () => {
+  expect(tail('kort')).toBe('kort')
+  expect(tail('regel een\nregel twee')).toBe('regel een regel twee')
+  const long = 'woord '.repeat(100)
+  expect(tail(long, 50).length).toBeLessThanOrEqual(51)
+  expect(tail(long, 50).startsWith('…')).toBe(true)
+  expect(whyOf('', '')).toBeUndefined()
+  expect(whyOf('ik moet de skill laden', '')).toBe('dacht: ik moet de skill laden')
+  expect(whyOf('', 'Ik start een Explore-agent.')).toBe('zei: Ik start een Explore-agent.')
+  expect(whyOf('denk', 'zeg')).toBe('zei: zeg · dacht: denk')
 })

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Catalog, Config, Entry, StationId, Status } from '../types'
-import { EMPTY_CATALOG, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
+import { EMPTY_CATALOG, WHY_TOOLS, whyOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -11,7 +11,7 @@ const KEEP = 80
 const CREW = 12
 
 // Change the tag when a field of Entry or Board changes: it declines what an earlier version stored.
-const board = atom({ plugin: 'lot-map', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-4' })
+const board = atom({ plugin: 'lot-map', key: 'board' } as const, { entries: [], counts: {} } as Board, { shape: 'board-5' })
 
 // What the session has loaded, for the column beside the feed. Read from the engine's lists alone.
 const catalog = atom({ plugin: 'lot-map', key: 'catalog' } as const, EMPTY_CATALOG as Catalog, { shape: 'catalog-1' })
@@ -43,6 +43,7 @@ type Start = {
   startedAt?: number
   endedAt?: number
   ref?: string
+  why?: string
   patch?: Partial<Pick<Board, 'model' | 'step' | 'switchedAt'>>
 }
 
@@ -70,6 +71,7 @@ async function begin($: EngineInterface, start: Start): Promise<string | undefin
       ...(start.agentId !== undefined ? { agentId: start.agentId } : {}),
       ...(start.mark !== undefined ? { mark: start.mark } : {}),
       ...(start.ref !== undefined ? { ref: start.ref } : {}),
+      ...(start.why !== undefined ? { why: start.why } : {}),
     }
     await update($, board, b => ({
       ...b,
@@ -231,6 +233,10 @@ export const register: Register = (on, options) => {
   // Loses nothing across a reload that matters: a reload never lands in the middle of a call.
   const refused = new Set<string>()
 
+  // What the model wrote and thought just before a skill, agent or workflow call, by the call's tool_use_id,
+  // until tool.call picks it up. Read from the stream of turn.step, which is handed on chunk for chunk.
+  const reasons = new Map<string, string>()
+
   // The model the main loop last ran on: in this session, or else in the last session in this folder.
   // The one thing the map keeps between sessions, and only its name.
   let lastModel: string | undefined
@@ -313,9 +319,31 @@ export const register: Register = (on, options) => {
       from: isMain ? 'core' : 'agents',
       ...(isMain ? { patch: { model: e.model, step: e.index + 1 } } : { agentId: e.agentId }),
     })
+    let thinking = ''
+    let text = ''
     try {
-      return yield* next(e)
+      const stream = next(e)
+      let item = await stream.next()
+      while (item.done !== true) {
+        const c = item.value as { kind?: string; text?: unknown; name?: unknown; id?: unknown }
+        if (c.kind === 'thinking' && typeof c.text === 'string') thinking += c.text
+        else if (c.kind === 'text' && typeof c.text === 'string') text += c.text
+        else if (c.kind === 'tool' && typeof c.id === 'string' && typeof c.name === 'string' && WHY_TOOLS.has(c.name)) {
+          const why = whyOf(thinking, text)
+          if (why !== undefined) reasons.set(c.id, why)
+          if (reasons.size > 50) reasons.delete(reasons.keys().next().value as string)
+        }
+        yield item.value
+        item = await stream.next()
+      }
+      return item.value
     } finally {
+      await quietly(() =>
+        update($, board, b => ({
+          ...b,
+          seen: { thinking: (b.seen?.thinking ?? 0) + thinking.length, text: (b.seen?.text ?? 0) + text.length, steps: (b.seen?.steps ?? 0) + 1 },
+        })),
+      )
       await finish($, id, 'ok', isMain ? await contextOf($) : undefined)
     }
   })
@@ -362,7 +390,9 @@ export const register: Register = (on, options) => {
       if (file !== undefined) {
         await update($, catalog, c => (c.files.includes(file) ? c : { ...c, files: [...c.files, file].slice(-24) }))
       }
-      return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
+      const why = e.tool_use_id !== undefined ? reasons.get(e.tool_use_id) : undefined
+      if (e.tool_use_id !== undefined) reasons.delete(e.tool_use_id)
+      return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
     try {
       const ran = await next(e)
@@ -453,10 +483,19 @@ export const register: Register = (on, options) => {
       // Theme keys, so the rows read on a light theme as well as on a dark one.
       const color = isSwitch || entry.status === 'run' ? 'claude' : entry.status === 'ok' ? undefined : 'error'
       const line = `${mark} ${t.stations[entry.station].padEnd(column)} ${entry.label}${times > 1 ? `  +${times - 1}` : ''}${took === '' ? '' : `  ${took}`}`
-      return (
+      const row = (
         <Text mono size="footnote" color={color} dimColor={entry.status === 'ok' && !isSwitch}>
           {line}
         </Text>
+      )
+      if (entry.why === undefined) return row
+      return (
+        <Box flexDirection="column">
+          {row}
+          <Text mono size="footnote" dimColor>
+            {`  ↳ waarom (eigen woorden model): ${entry.why}`}
+          </Text>
+        </Box>
       )
     })
     const feed = rows.length > 0 ? rows : [<Text dimColor>{t.nothingYet}</Text>]
@@ -491,6 +530,9 @@ export const register: Register = (on, options) => {
         <Box flexDirection="column">
           {current}
           <Text dimColor>{tally === '' ? t.noCounts : tally}</Text>
+          {state.seen !== undefined ? (
+            <Text dimColor>{`Stroom: denken ${state.seen.thinking} · tekst ${state.seen.text} tekens in ${state.seen.steps} stappen`}</Text>
+          ) : null}
           {both(feed)}
         </Box>
       )
