@@ -44,7 +44,7 @@ export type Board = {
   /** When the model last changed. */
   switchedAt?: number
   /** How much thinking and visible text came through the model's stream this session (characters), and in how many steps. */
-  seen?: { thinking: number; text: number; steps: number }
+  seen?: { thinking: number; text: number; steps: number; tools?: Record<string, number>; kinds?: Record<string, number>; reasons?: number }
 }
 
 /** One name in the loaded column, with where it comes from. */

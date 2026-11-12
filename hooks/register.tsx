@@ -373,17 +373,24 @@ export const register: Register = (on, options) => {
     })
     let thinking = ''
     let text = ''
+    // Measured per step: which chunk kinds and which tool names come through, and how many reasons were kept.
+    const kinds: Record<string, number> = {}
+    const tools: Record<string, number> = {}
+    let kept = 0
     try {
       const stream = next(e)
       let item = await stream.next()
       while (item.done !== true) {
         const c = item.value as { kind?: string; text?: unknown; name?: unknown; id?: unknown }
+        if (typeof c.kind === 'string') kinds[c.kind] = (kinds[c.kind] ?? 0) + 1
+        if (c.kind === 'tool' && typeof c.name === 'string') tools[c.name] = (tools[c.name] ?? 0) + 1
         if (c.kind === 'thinking' && typeof c.text === 'string') thinking += c.text
         else if (c.kind === 'text' && typeof c.text === 'string') text += c.text
         else if (c.kind === 'tool' && typeof c.id === 'string' && typeof c.name === 'string' && WHY_TOOLS.has(c.name)) {
           const stated = statedWhy(text)
           const why = stated !== undefined ? `Waarom: ${stated}` : whyOf(thinking, text)
           if (why !== undefined) {
+            kept++
             reasons.set(c.id, why)
             reasonsByTool.set(c.name, why)
           }
@@ -397,7 +404,14 @@ export const register: Register = (on, options) => {
       await quietly(() =>
         update($, board, b => ({
           ...b,
-          seen: { thinking: (b.seen?.thinking ?? 0) + thinking.length, text: (b.seen?.text ?? 0) + text.length, steps: (b.seen?.steps ?? 0) + 1 },
+          seen: {
+            thinking: (b.seen?.thinking ?? 0) + thinking.length,
+            text: (b.seen?.text ?? 0) + text.length,
+            steps: (b.seen?.steps ?? 0) + 1,
+            tools: Object.entries(tools).reduce((acc, [k, n]) => ({ ...acc, [k]: (acc[k] ?? 0) + n }), { ...b.seen?.tools }),
+            kinds: Object.entries(kinds).reduce((acc, [k, n]) => ({ ...acc, [k]: (acc[k] ?? 0) + n }), { ...b.seen?.kinds }),
+            reasons: (b.seen?.reasons ?? 0) + kept,
+          },
         })),
       )
       await finish($, id, 'ok', isMain ? await contextOf($) : undefined)
@@ -606,7 +620,10 @@ export const register: Register = (on, options) => {
           {current}
           <Text dimColor>{tally === '' ? t.noCounts : tally}</Text>
           {state.seen !== undefined ? (
-            <Text dimColor>{`Stroom: denken ${state.seen.thinking} · tekst ${state.seen.text} tekens in ${state.seen.steps} stappen`}</Text>
+            <Text dimColor>{`Stroom: denken ${state.seen.thinking} · tekst ${state.seen.text} tekens in ${state.seen.steps} stappen · redenen ${state.seen.reasons ?? 0}`}</Text>
+          ) : null}
+          {state.seen !== undefined ? (
+            <Text dimColor>{`  chunks ${Object.entries(state.seen.kinds ?? {}).map(([k, n]) => `${k} ${n}`).join(' · ') || '—'} · tools ${Object.entries(state.seen.tools ?? {}).map(([k, n]) => `${k} ${n}`).join(' · ') || '—'}`}</Text>
           ) : null}
           {both(feed)}
         </Box>
