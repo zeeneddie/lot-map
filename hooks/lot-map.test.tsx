@@ -4,7 +4,7 @@ import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
 import { stringsFor } from './text'
-import { EMPTY_CATALOG, mcpStatusOf, columnLines, frontName, hookDecls, matcherFits, mcpNames, mentions, missing, scriptOf, skillFileOf, splitClaudeMd, statedWhy, tail, whyOf } from './catalog'
+import { EMPTY_CATALOG, awPath, awSummary, mcpStatusOf, columnLines, frontName, hookDecls, matcherFits, mcpNames, mentions, missing, scriptOf, skillFileOf, splitClaudeMd, statedWhy, tail, whyOf } from './catalog'
 
 const PANE = {
   plugin: 'lot-map',
@@ -980,4 +980,32 @@ test('an MCP server that did not connect shows why, read along from a ToolSearch
   expect(await ui.find({ type: 'Text', text: /✕ penpot · niet verbonden: ECONNREFUSED/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /✕ claude\.ai Gmail · niet verbonden: auth/ })).toBeDefined()
   await ui.unmount()
+})
+
+test('AW1: one session askWhy counts, from the board, counts only', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.list', () => ({ value: [] }))
+  on('command.list', () => ({ value: [] }))
+  on('tool.call', () => ({ result: {} }))
+  on('turn.step', async function* () {
+    yield { kind: 'text', index: 0, text: 'Waarom: je vroeg erom.\n' } as never
+    yield { kind: 'tool', index: 1, id: 'tu-1', name: 'Agent' } as never
+    return { turnId: 't1', index: 0, answer: '', toolUses: [] } as never
+  })
+  for await (const _ of $.turn.step(STEP)) void _
+  await $.tool.call({ tool: 'Agent', subagent_type: 'Explore', description: 'Tel', prompt: 'x', tool_use_id: 'tu-1' } as never)
+  await $.tool.call({ tool: 'Skill', skill: 'nergens-bekend' } as never)
+  await $.tool.call({ tool: 'Read', file_path: '/w/a.md' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /askWhy 1\/2 · nergens 2/ })).toBeDefined()
+  await ui.unmount()
+  expect(awPath('/h', '2026-11-12', 's/1')).toBe('/h/.mq/werkinzicht/askwhy/2026-11-12-s_1.json')
+})
+
+test('AW1: the summary carries counts and names, never the reason text', () => {
+  const b = { entries: [], counts: {}, aw: { calls: 2, stated: 1, statedChars: 14, source: 1, nowhere: 1 }, seen: { thinking: 0, text: 300, steps: 3 } } as Board
+  const s = awSummary(b, { date: '2026-11-12', session: 's1', repo: 'mq-platform--analyses-91', model: 'claude-opus-5-5', askWhy: true })
+  expect(s).toEqual({ date: '2026-11-12', session: 's1', repo: 'mq-platform--analyses-91', model: 'claude-opus-5-5', askWhy: true, calls: 2, stated: 1, statedChars: 14, source: 1, nowhere: 1, textChars: 300, steps: 3 })
+  expect(JSON.stringify(s)).not.toMatch(/Waarom/)
 })

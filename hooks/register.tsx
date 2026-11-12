@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Catalog, Config, Entry, StationId, Status } from '../types'
 import type { Source } from './catalog'
-import { ASK_WHY, EMPTY_CATALOG, mcpStatusOf, WHY_TOOLS, mentions, splitClaudeMd, statedWhy, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
+import { ASK_WHY, EMPTY_CATALOG, awPath, awSummary, mcpStatusOf, WHY_TOOLS, mentions, splitClaudeMd, statedWhy, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -249,6 +249,7 @@ export const register: Register = (on, options) => {
   const askWhyOption = (options as Record<string, unknown> | undefined)?.askWhy
   const askWhy = askWhyOption === true || askWhyOption === 'true'
   let lastPrompt = ''
+  let sessionCwd = ''
   let systemSections: Source[] = []
   let contextSources: Source[] = []
   const attachments = new Map<string, string>()
@@ -265,6 +266,7 @@ export const register: Register = (on, options) => {
   let modelKey = 'model'
 
   on('session.start', async ($, e, next) => {
+    sessionCwd = e.cwd
     await quietly(() => $.command.register({ name: 'lot-map', description: t.command }))
     void quietly(() => $.ui.open({ id: PANE, title: t.title }))
     await quietly(async () => {
@@ -319,6 +321,20 @@ export const register: Register = (on, options) => {
       if (attachments.size > 30) attachments.delete(attachments.keys().next().value as string)
     })
     return r
+  })
+
+  // AW1: at the end of a session, one small file with its askWhy counts. Counts and names only, never text.
+  on('session.end', async ($, e, next) => {
+    await quietly(async () => {
+      const b = await read($, board)
+      if (b.aw === undefined && (b.seen?.steps ?? 0) === 0) return
+      const home = (await $.env.get('HOME')) ?? ''
+      const now = await $.clock.now()
+      const date = new Date(now).toISOString().slice(0, 10)
+      const summary = awSummary(b, { date, session: e.sessionId, repo: sessionCwd.split('/').filter(Boolean).pop() ?? '', model: lastModel ?? '', askWhy })
+      await $.fs.write(awPath(home, date, e.sessionId), JSON.stringify(summary) + '\n')
+    })
+    return next(e)
   })
 
   // An agent type offered to the model: noted for the loaded column, and handed on exactly as it came.
@@ -392,6 +408,12 @@ export const register: Register = (on, options) => {
         else if (c.kind === 'text' && typeof c.text === 'string') text += c.text
         else if (c.kind === 'tool' && typeof c.id === 'string' && typeof c.name === 'string' && WHY_TOOLS.has(c.name)) {
           const stated = statedWhy(text)
+          if (stated !== undefined) {
+            const chars = stated.length
+            await quietly(() =>
+              update($, board, b => ({ ...b, aw: { ...(b.aw ?? { calls: 0, stated: 0, statedChars: 0, source: 0, nowhere: 0 }), stated: (b.aw?.stated ?? 0) + 1, statedChars: (b.aw?.statedChars ?? 0) + chars } })),
+            )
+          }
           const why = stated !== undefined ? `Waarom: ${stated}` : whyOf(thinking, text)
           if (why !== undefined) {
             kept++
@@ -487,6 +509,12 @@ export const register: Register = (on, options) => {
       const named = e.tool === 'Skill' ? input.skill : e.tool === 'Agent' ? input.subagent_type || 'general-purpose' : undefined
       const found = typeof named === 'string' ? mentions(named, sourcesNow(), 2, 70) : []
       const source = found.length ? found.join(' · ') : typeof named === 'string' ? 'nergens genoemd: eigen keuze van het model' : undefined
+      if (WHY_TOOLS.has(e.tool)) {
+        await update($, board, b => {
+          const aw = b.aw ?? { calls: 0, stated: 0, statedChars: 0, source: 0, nowhere: 0 }
+          return { ...b, aw: { ...aw, calls: aw.calls + 1, source: aw.source + (found.length ? 1 : 0), nowhere: aw.nowhere + (typeof named === 'string' && !found.length ? 1 : 0) } }
+        })
+      }
       return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(source !== undefined ? { source } : {}), ...(e.tool_use_id !== undefined ? { useId: e.tool_use_id } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
     try {
@@ -638,7 +666,7 @@ export const register: Register = (on, options) => {
           {current}
           <Text dimColor>{tally === '' ? t.noCounts : tally}</Text>
           {state.seen !== undefined ? (
-            <Text dimColor>{`Stroom: denken ${state.seen.thinking} · tekst ${state.seen.text} tekens in ${state.seen.steps} stappen · redenen ${state.seen.reasons ?? 0}`}</Text>
+            <Text dimColor>{`Stroom: denken ${state.seen.thinking} · tekst ${state.seen.text} tekens in ${state.seen.steps} stappen · redenen ${state.seen.reasons ?? 0}${state.aw ? ` · askWhy ${state.aw.stated}/${state.aw.calls} · nergens ${state.aw.nowhere}` : ''}`}</Text>
           ) : null}
           {state.seen !== undefined ? (
             <Text dimColor>{`  chunks ${Object.entries(state.seen.kinds ?? {}).map(([k, n]) => `${k} ${n}`).join(' · ') || '—'} · tools ${Object.entries(state.seen.tools ?? {}).map(([k, n]) => `${k} ${n}`).join(' · ') || '—'}`}</Text>

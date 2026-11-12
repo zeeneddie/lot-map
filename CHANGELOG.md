@@ -10,6 +10,11 @@ What changed in each version of lot-map, newest first. To get a new version, see
 
 
 
+
+## 0.5.2-mq.14 (fork zeeneddie, branch feat/werkinzicht)
+
+- AW1, askWhy measurement: the map counts Skill/Agent/Workflow calls, how many got a stated `Waarom:` line, and where their names stood; the measurement line shows `askWhy stated/calls · nergens n`. At the end of a session one file goes to `~/.mq/werkinzicht/askwhy/<date>-<session>.json` with counts and names only, never the reason text — one file per session, since `$.fs` has no append and sessions would write over each other.
+- `tools/werkinzicht_telling.py` sums those files over a period and sets them against AW2's criteria (coverage ≥ 80 %, source, usefulness ≥ 3/week from `nut.md`, cost ≤ 2 %).
 ## 0.5.2-mq.13 (fork zeeneddie, branch feat/werkinzicht)
 
 - Start-up faults: a ToolSearch result carries `failed_mcp_servers` (name, error code, error) and `pending_mcp_servers`. The map reads them along, nothing asked, and shows the reason beside the `✕` of a configured server (`niet geladen: ECONNREFUSED …`), and lists failed servers the configuration on disk does not hold (such as claude.ai connectors). Without `--debug` Claude Code writes no debug log, so this is the only place the reason reaches a mod.

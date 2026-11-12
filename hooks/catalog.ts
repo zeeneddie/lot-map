@@ -1,6 +1,6 @@
 // The loaded column: what the session has at hand, and which of it the work in the feed is using.
 // Everything here is read from the engine's own lists or from the calls the map already sees; no model is asked.
-import type { Catalog, Entry, HookDecl, Item } from '../types'
+import type { Board, Catalog, Entry, HookDecl, Item } from '../types'
 
 import { clean } from './map'
 
@@ -391,4 +391,40 @@ export function mcpStatusOf(result: unknown): { failed: { name: string; why: str
     : []
   const pending = Array.isArray(r.pending_mcp_servers) ? (r.pending_mcp_servers as unknown[]).filter((p): p is string => typeof p === 'string') : []
   return failed.length || pending.length || 'failed_mcp_servers' in r || 'pending_mcp_servers' in r ? { failed, pending } : undefined
+}
+
+// ---- askWhy measurement (AW1): one small file per session, counts and names only ------------------------
+
+export type AwSummary = {
+  date: string
+  session: string
+  repo: string
+  model: string
+  askWhy: boolean
+  calls: number
+  stated: number
+  statedChars: number
+  source: number
+  nowhere: number
+  textChars: number
+  steps: number
+}
+
+/** The file one session's counts go to: one per session, so sessions never write over each other. */
+export function awPath(home: string, date: string, session: string): string {
+  return `${home}/.mq/werkinzicht/askwhy/${date}-${session.replace(/[^A-Za-z0-9._-]/g, '_')}.json`
+}
+
+/** One session's counts from the board: what AW2's criteria are measured on. */
+export function awSummary(b: Board, meta: { date: string; session: string; repo: string; model: string; askWhy: boolean }): AwSummary {
+  return {
+    ...meta,
+    calls: b.aw?.calls ?? 0,
+    stated: b.aw?.stated ?? 0,
+    statedChars: b.aw?.statedChars ?? 0,
+    source: b.aw?.source ?? 0,
+    nowhere: b.aw?.nowhere ?? 0,
+    textChars: b.seen?.text ?? 0,
+    steps: b.seen?.steps ?? 0,
+  }
 }
