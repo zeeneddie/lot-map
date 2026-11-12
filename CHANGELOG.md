@@ -3,6 +3,13 @@
 What changed in each version of lot-map, newest first. To get a new version, see [Updating](README.md#updating).
 
 
+
+## 0.5.2-mq.2 (fork zeeneddie, branch feat/werkinzicht)
+
+- Layer 1, the configuration on disk, beside what is loaded: MCP servers from `~/.claude.json` (top level and this folder's project) and `.mcp.json`; agent files in `~/.claude/agents` and `.claude/agents` (one folder down); skill folders with a `SKILL.md`; hooks from the merged settings with the script each runs and whether it is there; instruction and memory files that exist.
+- What is configured and not loaded is marked `✕` in the warning colour: an MCP server not loaded, an agent file not offered, a skill folder not in the command list, a hook script that is missing. Nothing is called missing before the first model call, when the lists are not complete yet.
+- Instruction files show whether the session read them.
+- **Reads files now**, which the upstream mod does not: names only, values (an MCP server's command or environment, a hook's arguments) are read past and never kept. See PRIVACY.md.
 ## 0.5.2-mq.1 (fork zeeneddie, branch feat/werkinzicht)
 
 - The pane has a second column, **GELADEN**: tools (and per MCP server), skills and commands by source, agent types as the engine offers them, and the instruction and memory files the session read. Built-in commands are counted, not named.

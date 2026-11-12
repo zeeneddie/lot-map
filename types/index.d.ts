@@ -53,6 +53,20 @@ export type Catalog = {
   agents: Item[]
   /** Instruction and memory files the session read (last two parts of the path). */
   files: string[]
+  /** What the configuration on disk says should be there: names only, never values. */
+  config?: Config
+}
+
+/** A hook as the settings declare it, and whether the script it runs is there. */
+export type HookDecl = { event: string; matcher: string; script: string; missing: boolean }
+
+export type Config = {
+  mcp: string[]
+  agents: string[]
+  skills: string[]
+  hooks: HookDecl[]
+  /** Instruction and memory files that exist (last two parts of the path). */
+  files: string[]
 }
 
 declare module 'claude-code' {

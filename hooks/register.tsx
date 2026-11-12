@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Board, Catalog, Entry, StationId, Status } from '../types'
-import { EMPTY_CATALOG, activeRefs, columnLines, fromCommands, fromTools, refOf, sameCatalog, steeringFile } from './catalog'
+import type { Board, Catalog, Config, Entry, StationId, Status } from '../types'
+import { EMPTY_CATALOG, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -138,6 +138,63 @@ async function refresh($: EngineInterface): Promise<void> {
   })
 }
 
+/** A file's text, or undefined when it is not there or cannot be read. */
+const textOf = async ($: EngineInterface, path: string): Promise<string | undefined> => quietly(() => $.fs.read(path) as Promise<string>)
+
+const jsonOf = async ($: EngineInterface, path: string): Promise<unknown> => {
+  const text = await textOf($, path)
+  if (text === undefined) return undefined
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return undefined
+  }
+}
+
+/** Markdown files in a folder and the folders in it, one level down: agent definitions are kept that way. */
+async function markdownIn($: EngineInterface, dir: string): Promise<string[]> {
+  const out: string[] = []
+  const top = (await quietly(() => $.fs.list(dir))) ?? []
+  for (const e of top) {
+    if (e.kind === 'file' && e.name.endsWith('.md')) out.push(`${dir}/${e.name}`)
+    if (e.kind === 'dir') for (const s of (await quietly(() => $.fs.list(`${dir}/${e.name}`))) ?? []) if (s.kind === 'file' && s.name.endsWith('.md')) out.push(`${dir}/${e.name}/${s.name}`)
+  }
+  return out
+}
+
+/**
+ * What the configuration on disk says should be there, for the session in `cwd`: names only. The values in it
+ * (an MCP server's command, its environment, a hook's arguments) are read past and never kept.
+ */
+async function readConfig($: EngineInterface, cwd: string): Promise<Config | undefined> {
+  return quietly(async () => {
+    const home = (await $.env.get('HOME')) ?? ''
+    const mcp = mcpNames(await jsonOf($, `${home}/.claude.json`), await jsonOf($, `${cwd}/.mcp.json`), cwd)
+    const agents: string[] = []
+    for (const path of [...(await markdownIn($, `${home}/.claude/agents`)), ...(await markdownIn($, `${cwd}/.claude/agents`))]) {
+      const text = await textOf($, path)
+      agents.push((text !== undefined ? frontName(text) : undefined) ?? (path.split('/').pop() ?? '').replace(/\.md$/, ''))
+    }
+    const skills: string[] = []
+    for (const dir of [`${home}/.claude/skills`, `${cwd}/.claude/skills`]) {
+      for (const e of (await quietly(() => $.fs.list(dir))) ?? []) {
+        if (e.kind !== 'dir' && !e.isLink) continue
+        const text = await textOf($, `${dir}/${e.name}/SKILL.md`)
+        if (text !== undefined) skills.push(frontName(text) ?? e.name)
+      }
+    }
+    const settings = (await quietly(() => $.settings.read() as Promise<Record<string, unknown>>)) ?? {}
+    const hooks = []
+    for (const h of hookDecls(settings.hooks, home, cwd)) {
+      const there = h.path === undefined ? true : ((await quietly(() => $.fs.exists(h.path as string))) ?? true)
+      hooks.push({ event: h.event, matcher: h.matcher, script: h.script, missing: !there })
+    }
+    const files: string[] = []
+    for (const path of instructionPaths(home, cwd)) if (await quietly(() => $.fs.exists(path))) files.push(lastTwo(path))
+    return { mcp, agents: [...new Set(agents)], skills: [...new Set(skills)], hooks, files }
+  })
+}
+
 /** How full the context window is, as the status line has it; costs nothing. */
 async function contextOf($: EngineInterface): Promise<Pick<Board, 'context'>> {
   const percent = await quietly(async () => (await $.session.usage()).context.percent)
@@ -188,6 +245,8 @@ export const register: Register = (on, options) => {
       if (lastModel === undefined && typeof kept === 'string') lastModel = kept
     })
     await refresh($)
+    const config = await readConfig($, e.cwd)
+    if (config !== undefined) await quietly(() => update($, catalog, c => ({ ...c, config })))
     return next(e)
   })
 
@@ -401,7 +460,7 @@ export const register: Register = (on, options) => {
     const side = (
       <Box flexDirection="column" width={beside ? LEFT : undefined}>
         {lines.map(l => (
-          <Text mono size="footnote" bold={l.head === true} color={l.lit ? 'claude' : undefined} dimColor={l.dim === true}>
+          <Text mono size="footnote" bold={l.head === true} color={l.lit ? 'claude' : l.warn ? 'warning' : undefined} dimColor={l.dim === true}>
             {l.text === '' ? ' ' : l.text}
           </Text>
         ))}

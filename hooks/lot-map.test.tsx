@@ -4,6 +4,7 @@ import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
 import { stringsFor } from './text'
+import { EMPTY_CATALOG, columnLines, frontName, hookDecls, mcpNames, missing, scriptOf } from './catalog'
 
 const PANE = {
   plugin: 'lot-map',
@@ -809,4 +810,32 @@ test('the loaded column lists what the engine has and lights what the work uses'
   expect(await ui.find({ type: 'Text', text: /help · builtin/ })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: /repo\/AGENTS\.md/ }))?.text).toContain('▶')
   await ui.unmount()
+})
+
+test('configuration on disk is read for names alone, and what is configured but not loaded is marked', () => {
+  expect(frontName('---\nname: repo-analyse\ndescription: x\n---\nbody')).toBe('repo-analyse')
+  expect(frontName('no front matter')).toBeUndefined()
+  const cj = { mcpServers: { context7: { command: 'npx', env: { KEY: 'secret' } } }, projects: { '/w/p': { mcpServers: { penpot: {} } }, '/w/other': { mcpServers: { x: {} } } } }
+  expect(mcpNames(cj, { mcpServers: { local: {} } }, '/w/p').sort()).toEqual(['context7', 'local', 'penpot'])
+  expect(JSON.stringify(mcpNames(cj, undefined, '/w/p'))).not.toContain('secret')
+  expect(scriptOf('bash $HOME/bin/bord-start-guard.sh', '/h', '/w/p')).toBe('/h/bin/bord-start-guard.sh')
+  expect(scriptOf('uv run $CLAUDE_PROJECT_DIR/.claude/hooks/x.py --flag', '/h', '/w/p')).toBe('/w/p/.claude/hooks/x.py')
+  expect(scriptOf('jq -r .x | grep -q y', '/h', '/w/p')).toBeUndefined()
+  const decls = hookDecls({ PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '~/bin/g.sh' }] }] }, '/h', '/w/p')
+  expect(decls).toEqual([{ event: 'PreToolUse', matcher: 'Bash', script: 'bin/g.sh', path: '/h/bin/g.sh' }])
+
+  const config = { mcp: ['context7', 'penpot', 'claude.ai Gmail'], agents: ['Explore-like', 'joker'], skills: ['repo-analyse', 'ghost'], hooks: [{ event: 'PreToolUse', matcher: 'Bash', script: 'bin/g.sh', missing: true }], files: ['p/AGENTS.md'] }
+  const before = { ...EMPTY_CATALOG, config }
+  // Before the first model call nothing is called missing: the lists are not complete yet.
+  expect(missing(before)).toEqual({ mcp: [], agents: [], skills: [] })
+  const after = { ...before, tools: 3, mcp: { context7: 2, claude_ai_Gmail: 1 }, agents: [{ name: 'joker', source: 'userSettings' }], commands: [{ name: 'repo-analyse', source: 'user' }] }
+  expect(missing(after)).toEqual({ mcp: ['penpot'], agents: ['Explore-like'], skills: ['ghost'] })
+  const lines = columnLines(after, new Set(), 60, 60)
+  const text = lines.map(l => l.text)
+  expect(text).toContain('✕ penpot · geconfigureerd, niet geladen')
+  expect(text).toContain('✕ ghost · map, niet in lijst')
+  expect(text).toContain('✕ Explore-like · bestand, niet aangeboden')
+  expect(text).toContain('✕ PreToolUse Bash · bin/g.sh ontbreekt')
+  expect(text).toContain('  p/AGENTS.md · niet gelezen')
+  expect(lines.filter(l => l.warn).length).toBe(4)
 })

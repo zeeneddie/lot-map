@@ -27,6 +27,10 @@ The mod does not look for personal data and has no use for it. It takes a name f
 
 To remove what it keeps, uninstall the plugin.
 
+## Fork zeeneddie (feat/werkinzicht)
+
+This fork reads files, the upstream mod does not: `~/.claude.json`, `.mcp.json`, the agent and skill folders, the merged settings and whether the instruction files and hook scripts exist. It keeps names only (server, agent, skill, hook event and script, the last two parts of a path) in the session's state; values such as an MCP server's command or environment are read past and never kept. It still makes no network requests, runs no processes and calls no model.
+
 ## What it does not do
 
 - It makes no network requests and has no telemetry, analytics or crash reports.
