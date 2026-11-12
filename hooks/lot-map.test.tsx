@@ -4,7 +4,7 @@ import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
 import { stringsFor } from './text'
-import { EMPTY_CATALOG, awPath, awSummary, mcpStatusOf, columnLines, frontName, hookDecls, matcherFits, mcpNames, mentions, missing, scriptOf, skillFileOf, splitClaudeMd, statedWhy, tail, whyOf } from './catalog'
+import { EMPTY_CATALOG, awPath, awSummary, mcpFailuresInNotice, mcpStatusOf, columnLines, frontName, hookDecls, matcherFits, mcpNames, mentions, missing, scriptOf, skillFileOf, splitClaudeMd, statedWhy, tail, whyOf } from './catalog'
 
 const PANE = {
   plugin: 'lot-map',
@@ -1008,4 +1008,20 @@ test('AW1: the summary carries counts and names, never the reason text', () => {
   const s = awSummary(b, { date: '2026-11-12', session: 's1', repo: 'mq-platform--analyses-91', model: 'claude-opus-5-5', askWhy: true })
   expect(s).toEqual({ date: '2026-11-12', session: 's1', repo: 'mq-platform--analyses-91', model: 'claude-opus-5-5', askWhy: true, calls: 2, stated: 1, statedChars: 14, source: 1, nowhere: 1, textChars: 300, steps: 3 })
   expect(JSON.stringify(s)).not.toMatch(/Waarom/)
+})
+
+test('LM7: the start-up notice of MCP servers that did not connect gives name and reason', async ($, on) => {
+  const notice = 'The following MCP servers are configured but failed to connect — their tools are unavailable for this session:\npenpot (ECONNREFUSED): "ECONNREFUSED: Unable to connect. Is the computer able to access the url?"\n\nTreat this as a connection failure.'
+  expect(mcpFailuresInNotice(notice)).toEqual([{ name: 'penpot', why: 'ECONNREFUSED: Unable to connect. Is the computer able to access the url?' }])
+  expect(mcpFailuresInNotice('nothing about servers')).toBeUndefined()
+
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.list', () => ({ value: [] }))
+  on('command.list', () => ({ value: [] }))
+  on('prompt.attachment', () => ({ text: notice }))
+  await $.prompt.attachment({ type: 'mcp_failures', text: notice, origin: { kind: 'engine' } } as never)
+  const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 90 }, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /✕ penpot · niet verbonden: ECONNREFUSED/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /herinneringen mcp_failures 1/ })).toBeDefined()
+  await ui.unmount()
 })

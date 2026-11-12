@@ -428,3 +428,20 @@ export function awSummary(b: Board, meta: { date: string; session: string; repo:
     steps: b.seen?.steps ?? 0,
   }
 }
+
+/**
+ * The start-up notice Claude Code adds when configured MCP servers did not connect: one `name (CODE): message` per line
+ * after the sentence. Read from a reminder's text; undefined when the text is no such notice.
+ */
+export function mcpFailuresInNotice(text: string): { name: string; why: string }[] | undefined {
+  if (!/failed to connect/i.test(text)) return undefined
+  const after = text.slice(text.search(/failed to connect/i))
+  const out: { name: string; why: string }[] = []
+  for (const line of after.split('\n')) {
+    const m = /^\s*[-•*]?\s*([A-Za-z0-9._ -]{1,64}?)\s*\(([A-Z][A-Z0-9_]{2,40}|[^)]{1,40})\)\s*:?\s*(.*)$/.exec(line)
+    if (!m?.[1] || !m[2]) continue
+    const message = (m[3] ?? '').replace(/^"|"$/g, '')
+    out.push({ name: m[1].trim(), why: clean(message.startsWith(m[2]) ? message : `${m[2]}${message ? ` ${message}` : ''}`, 80) })
+  }
+  return out
+}

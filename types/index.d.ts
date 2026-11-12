@@ -49,6 +49,8 @@ export type Board = {
   seen?: { thinking: number; text: number; steps: number; tools?: Record<string, number>; kinds?: Record<string, number>; reasons?: number }
   /** askWhy measurement (AW1): calls of Skill/Agent/Workflow, how many got a stated reason, where their names stood. Counts only. */
   aw?: { calls: number; stated: number; statedChars: number; source: number; nowhere: number }
+  /** Reminder types seen (prompt.attachment), counted: where engine notices such as MCP failures arrive. */
+  attachments?: Record<string, number>
 }
 
 /** One name in the loaded column, with where it comes from. */

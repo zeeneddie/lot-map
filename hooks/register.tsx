@@ -3,7 +3,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Catalog, Config, Entry, StationId, Status } from '../types'
 import type { Source } from './catalog'
-import { ASK_WHY, EMPTY_CATALOG, awPath, awSummary, mcpStatusOf, WHY_TOOLS, mentions, splitClaudeMd, statedWhy, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
+import { ASK_WHY, EMPTY_CATALOG, awPath, awSummary, mcpFailuresInNotice, mcpStatusOf, WHY_TOOLS, mentions, splitClaudeMd, statedWhy, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -318,6 +318,12 @@ export const register: Register = (on, options) => {
     await quietly(async () => {
       const type = (e as { type?: unknown }).type
       if (typeof type === 'string' && typeof r.text === 'string' && r.text) attachments.set(type, r.text)
+      if (typeof type === 'string') await update($, board, b => ({ ...b, attachments: { ...b.attachments, [type]: (b.attachments?.[type] ?? 0) + 1 } }))
+      // The start-up notice of MCP servers that did not connect, with the reason: the one place a mod sees it.
+      const failures = typeof r.text === 'string' ? mcpFailuresInNotice(r.text) : undefined
+      if (failures !== undefined && failures.length > 0) {
+        await update($, catalog, c => ({ ...c, mcpStatus: { failed: failures, pending: c.mcpStatus?.pending ?? [] } }))
+      }
       if (attachments.size > 30) attachments.delete(attachments.keys().next().value as string)
     })
     return r
@@ -670,6 +676,9 @@ export const register: Register = (on, options) => {
           ) : null}
           {state.seen !== undefined ? (
             <Text dimColor>{`  chunks ${Object.entries(state.seen.kinds ?? {}).map(([k, n]) => `${k} ${n}`).join(' · ') || '—'} · tools ${Object.entries(state.seen.tools ?? {}).map(([k, n]) => `${k} ${n}`).join(' · ') || '—'}`}</Text>
+          ) : null}
+          {state.attachments !== undefined ? (
+            <Text dimColor>{`  herinneringen ${Object.entries(state.attachments).map(([k, n]) => `${k} ${n}`).join(' · ')}`}</Text>
           ) : null}
           {both(feed)}
         </Box>
