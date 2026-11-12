@@ -327,17 +327,16 @@ const wordRe = (name: string): RegExp => new RegExp(`(^|[^A-Za-z0-9_-])${name.re
  * Where the name stood, first in the person's prompt, then in what the engine loaded: one line per source, at most
  * `max`. A fact about the texts, not about the model's reasons — shown as "genoemd in".
  */
-export function mentions(name: string, sources: readonly Source[], max = 3): string[] {
+export function mentions(name: string, sources: readonly Source[], max = 3, width = 110): string[] {
   if (!name) return []
   const re = wordRe(name)
   const out: string[] = []
   for (const s of sources) {
     const line = s.text.split('\n').find(l => re.test(l))
     if (line === undefined) continue
-    out.push(`${s.label}: "${tail(line.trim(), 110)}"`)
-    if (out.length >= max) break
+    out.push(`${s.label}: "${tail(line.trim(), width)}"`)
   }
-  return out
+  return out.length > max ? [...out.slice(0, max), `+${out.length - max}`] : out
 }
 
 /** The last line the model wrote that starts with `Waarom:` (asked for by the askWhy option), or undefined. */

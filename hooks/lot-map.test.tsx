@@ -942,3 +942,8 @@ test('the stated reason reaches the row also when the tool call starts before th
   expect((await ui.find({ type: 'Text', text: /↳ waarom \(eigen woorden model\): Waarom: je vroeg erom\./ }))).toBeDefined()
   await ui.unmount()
 })
+
+test('where a name stood fits one line: at most two sources, the rest counted', () => {
+  const s = [1, 2, 3, 4].map(i => ({ label: `bron${i}`, text: `regel met Explore nummer ${i}` }))
+  expect(mentions('Explore', s, 2, 70)).toEqual(['bron1: "regel met Explore nummer 1"', 'bron2: "regel met Explore nummer 2"', '+2'])
+})

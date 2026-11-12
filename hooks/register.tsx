@@ -483,7 +483,7 @@ export const register: Register = (on, options) => {
       if (e.tool_use_id !== undefined) reasons.delete(e.tool_use_id)
       reasonsByTool.delete(e.tool)
       const named = e.tool === 'Skill' ? input.skill : e.tool === 'Agent' ? input.subagent_type || 'general-purpose' : undefined
-      const found = typeof named === 'string' ? mentions(named, sourcesNow()) : []
+      const found = typeof named === 'string' ? mentions(named, sourcesNow(), 2, 70) : []
       const source = found.length ? found.join(' · ') : typeof named === 'string' ? 'nergens genoemd: eigen keuze van het model' : undefined
       return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(source !== undefined ? { source } : {}), ...(e.tool_use_id !== undefined ? { useId: e.tool_use_id } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
     })
@@ -585,14 +585,14 @@ export const register: Register = (on, options) => {
       return (
         <Box flexDirection="column">
           {row}
-          {entry.source !== undefined ? (
-            <Text mono size="footnote" dimColor>
-              {`  ↳ genoemd in: ${entry.source}`}
-            </Text>
-          ) : null}
           {entry.why !== undefined ? (
             <Text mono size="footnote" dimColor>
               {`  ↳ waarom (eigen woorden model): ${entry.why}`}
+            </Text>
+          ) : null}
+          {entry.source !== undefined ? (
+            <Text mono size="footnote" dimColor>
+              {`  ↳ genoemd in: ${entry.source}`}
             </Text>
           ) : null}
         </Box>
