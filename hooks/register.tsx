@@ -242,7 +242,8 @@ export const register: Register = (on, options) => {
 
   // What the model had in front of it, to find where a skill's or agent's name stood (why, source 1). Kept in the
   // module only, never in state: the system prompt and the instruction files are large, and only names are looked up.
-  const askWhy = (options as Record<string, unknown> | undefined)?.askWhy === true
+  const askWhyOption = (options as Record<string, unknown> | undefined)?.askWhy
+  const askWhy = askWhyOption === true || askWhyOption === 'true'
   let lastPrompt = ''
   let systemSections: Source[] = []
   let contextSources: Source[] = []
