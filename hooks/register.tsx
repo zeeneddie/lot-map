@@ -239,6 +239,8 @@ export const register: Register = (on, options) => {
   // What the model wrote and thought just before a skill, agent or workflow call, by the call's tool_use_id,
   // until tool.call picks it up. Read from the stream of turn.step, which is handed on chunk for chunk.
   const reasons = new Map<string, string>()
+  // The same by tool name, for a call whose tool.call carries no tool_use_id: the latest reason per tool.
+  const reasonsByTool = new Map<string, string>()
 
   // What the model had in front of it, to find where a skill's or agent's name stood (why, source 1). Kept in the
   // module only, never in state: the system prompt and the instruction files are large, and only names are looked up.
@@ -381,7 +383,10 @@ export const register: Register = (on, options) => {
         else if (c.kind === 'tool' && typeof c.id === 'string' && typeof c.name === 'string' && WHY_TOOLS.has(c.name)) {
           const stated = statedWhy(text)
           const why = stated !== undefined ? `Waarom: ${stated}` : whyOf(thinking, text)
-          if (why !== undefined) reasons.set(c.id, why)
+          if (why !== undefined) {
+            reasons.set(c.id, why)
+            reasonsByTool.set(c.name, why)
+          }
           if (reasons.size > 50) reasons.delete(reasons.keys().next().value as string)
         }
         yield item.value
@@ -448,8 +453,10 @@ export const register: Register = (on, options) => {
           return had.includes(fromSkill.file) ? c : { ...c, chain: { ...c.chain, [fromSkill.skill]: [...had, fromSkill.file].slice(-12) } }
         })
       }
-      const why = e.tool_use_id !== undefined ? reasons.get(e.tool_use_id) : undefined
+      const byId = e.tool_use_id !== undefined ? reasons.get(e.tool_use_id) : undefined
+      const why = byId ?? reasonsByTool.get(e.tool)
       if (e.tool_use_id !== undefined) reasons.delete(e.tool_use_id)
+      reasonsByTool.delete(e.tool)
       const named = e.tool === 'Skill' ? input.skill : e.tool === 'Agent' ? input.subagent_type || 'general-purpose' : undefined
       const found = typeof named === 'string' ? mentions(named, sourcesNow()) : []
       const source = found.length ? found.join(' · ') : typeof named === 'string' ? 'nergens genoemd: eigen keuze van het model' : undefined

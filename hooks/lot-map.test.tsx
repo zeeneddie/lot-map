@@ -896,9 +896,30 @@ test('why, source 1: where the name of a skill or agent stood, as a fact about t
   expect(mentions('repo-analyse', sources)).toEqual(['memory/MEMORY.md: "- Repo-analyse = skill repo-analyse (11-11)"', 'herinnering skill_listing: "- repo-analyse: Analyseer een externe repo …"'])
   // A whole word only: `repo-analyses` is not `repo-analyse`.
   expect(mentions('repo-analyse', [{ label: 'x', text: 'de repo-analyses van vandaag' }])).toEqual([])
-  expect(mentions('Explore', [{ label: 'jouw prompt', text: 'start een Explore-subagent' }])).toEqual([])
+  expect(mentions('Explore', [{ label: 'jouw prompt', text: 'start een Explore-subagent' }])).toEqual(['jouw prompt: "start een Explore-subagent"'])
+  expect(mentions('Explore', [{ label: 'x', text: 'Explored the code' }])).toEqual([])
   expect(mentions('Explore', [{ label: 'jouw prompt', text: 'start een Explore subagent' }])).toEqual(['jouw prompt: "start een Explore subagent"'])
   expect(statedWhy('Ik laad de skill.\nWaarom: de gebruiker vroeg erom.\n')).toBe('de gebruiker vroeg erom.')
   expect(statedWhy('**Waarom:** regel in MEMORY.md')).toBe('regel in MEMORY.md')
   expect(statedWhy('geen reden')).toBeUndefined()
 })
+
+for (const withId of [true, false]) {
+  test(`the stated reason before an agent call reaches its row (tool_use_id ${withId ? 'present' : 'absent'})`, async ($, on) => {
+    on('clock.now', () => ({ value: 1_000_000 }))
+    on('tool.list', () => ({ value: [] }))
+    on('command.list', () => ({ value: [] }))
+    on('tool.call', () => ({ result: {} }))
+    on('turn.step', async function* () {
+      yield { kind: 'text', index: 0, text: 'Waarom: je vroeg expliciet om een Explore-subagent.\n' } as never
+      yield { kind: 'tool', index: 1, id: 'tu-1', name: 'Agent' } as never
+      return { turnId: 't1', index: 0, answer: '', toolUses: [] } as never
+    })
+    for await (const _ of $.turn.step(STEP)) void _
+    await $.tool.call({ tool: 'Agent', subagent_type: 'Explore', description: 'Tel skills', prompt: 'x', ...(withId ? { tool_use_id: 'tu-1' } : {}) } as never)
+
+    const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 90 }, surface: 'terminal' })
+    expect((await ui.find({ type: 'Text', text: /↳ waarom \(eigen woorden model\): Waarom: je vroeg expliciet/ }))).toBeDefined()
+    await ui.unmount()
+  })
+}

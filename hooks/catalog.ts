@@ -319,7 +319,9 @@ export function splitClaudeMd(text: string): Source[] {
 }
 
 /** The name as a whole word: `repo-analyse` matches in `skill repo-analyse.` but not in `repo-analyses`. */
-const wordRe = (name: string): RegExp => new RegExp(`(^|[^A-Za-z0-9_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9_-])`)
+// Before the name a hyphen counts as part of a word (`sub-x` is not `x`); after it not, so `Explore-subagent` names
+// Explore while `repo-analyses` still does not name `repo-analyse` (the `s` is a letter).
+const wordRe = (name: string): RegExp => new RegExp(`(^|[^A-Za-z0-9_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9_])`)
 
 /**
  * Where the name stood, first in the person's prompt, then in what the engine loaded: one line per source, at most
