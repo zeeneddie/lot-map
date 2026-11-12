@@ -249,7 +249,9 @@ export function mcpNames(claudeJson: unknown, mcpJson: unknown, cwd: string): st
 /** The script a hook command runs: the first word that is a path, with `~`, `$HOME` and `$CLAUDE_PROJECT_DIR` written out. */
 export function scriptOf(command: string, home: string, cwd: string): string | undefined {
   const words = command.replace(/\$\{?HOME\}?/g, home).replace(/\$\{?CLAUDE_PROJECT_DIR\}?/g, cwd).split(/\s+/)
-  const path = words.map(w => w.replace(/^["']|["']$/g, '')).find(w => w.includes('/') && !w.startsWith('-') && !w.includes('$'))
+  const paths = words.map(w => w.replace(/^["']|["']$/g, '')).filter(w => w.includes('/') && !w.startsWith('-') && !w.includes('$'))
+  // A wrapper such as hook-timer.sh runs the real hook after it: name that one, not the wrapper.
+  const path = paths.find(p => !/(^|\/)hook-timer\.sh$/.test(p)) ?? paths[0]
   return path?.replace(/^~(?=\/)/, home)
 }
 

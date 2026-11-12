@@ -821,6 +821,7 @@ test('configuration on disk is read for names alone, and what is configured but 
   expect(scriptOf('bash $HOME/bin/bord-start-guard.sh', '/h', '/w/p')).toBe('/h/bin/bord-start-guard.sh')
   expect(scriptOf('uv run $CLAUDE_PROJECT_DIR/.claude/hooks/x.py --flag', '/h', '/w/p')).toBe('/w/p/.claude/hooks/x.py')
   expect(scriptOf('jq -r .x | grep -q y', '/h', '/w/p')).toBeUndefined()
+  expect(scriptOf('bash $HOME/x/hooks/hook-timer.sh bord-start bash $HOME/bin/bord-start-guard.sh', '/h', '/w/p')).toBe('/h/bin/bord-start-guard.sh')
   const decls = hookDecls({ PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: '~/bin/g.sh' }] }] }, '/h', '/w/p')
   expect(decls).toEqual([{ event: 'PreToolUse', matcher: 'Bash', script: 'bin/g.sh', path: '/h/bin/g.sh' }])
 
