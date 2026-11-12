@@ -836,6 +836,21 @@ test('configuration on disk is read for names alone, and what is configured but 
   expect(text).toContain('✕ ghost · map, niet in lijst')
   expect(text).toContain('✕ Explore-like · bestand, niet aangeboden')
   expect(text).toContain('✕ PreToolUse Bash · bin/g.sh ontbreekt')
-  expect(text).toContain('  p/AGENTS.md · niet gelezen')
-  expect(lines.filter(l => l.warn).length).toBe(4)
+  expect(text).toContain('  p/AGENTS.md · niet geladen, niet gelezen')
+  expect(lines.filter(l => l.warn).length).toBe(5)
+})
+
+test('an instruction file the engine loads itself shows as loaded, with why and from which file', async ($, on) => {
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('tool.list', () => ({ value: [] }))
+  on('command.list', () => ({ value: [] }))
+  on('classic.InstructionsLoaded', () => ({}))
+  await $.classic.InstructionsLoaded({ hook_event_name: 'InstructionsLoaded', file_path: '/w/p/CLAUDE.md', memory_type: 'Project', load_reason: 'session_start', session_id: 's', transcript_path: '', cwd: '/w/p' } as never)
+  await $.classic.InstructionsLoaded({ hook_event_name: 'InstructionsLoaded', file_path: '/w/p/docs/RULES.md', memory_type: 'Project', load_reason: 'include', parent_file_path: '/w/p/CLAUDE.md', session_id: 's', transcript_path: '', cwd: '/w/p' } as never)
+
+  const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 90 }, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /^Instructies \(engine 2\)$/ }))).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /p\/CLAUDE\.md · geladen Project session_start$/ }))?.text).toContain('◆')
+  expect((await ui.find({ type: 'Text', text: /docs\/RULES\.md · geladen Project include ← p\/CLAUDE\.md$/ }))?.text).toContain('◆')
+  await ui.unmount()
 })

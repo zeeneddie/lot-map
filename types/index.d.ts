@@ -55,7 +55,11 @@ export type Catalog = {
   files: string[]
   /** What the configuration on disk says should be there: names only, never values. */
   config?: Config
+  /** Instruction files the engine itself loaded (InstructionsLoaded): why, and which file brought them in. */
+  loaded?: LoadedFile[]
 }
+
+export type LoadedFile = { file: string; kind: string; reason: string; parent?: string }
 
 /** A hook as the settings declare it, and whether the script it runs is there. */
 export type HookDecl = { event: string; matcher: string; script: string; missing: boolean }

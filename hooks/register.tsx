@@ -18,7 +18,7 @@ const catalog = atom({ plugin: 'lot-map', key: 'catalog' } as const, EMPTY_CATAL
 
 /** Below this many columns the two parts of the pane stack instead of standing side by side. */
 const SIDE_BY_SIDE = 100
-const LEFT = 40
+const LEFT = 48
 
 const newId = (now: number): string => `${now.toString(36)}${Math.random().toString(36).slice(2, 7)}`
 
@@ -247,6 +247,16 @@ export const register: Register = (on, options) => {
     await refresh($)
     const config = await readConfig($, e.cwd)
     if (config !== undefined) await quietly(() => update($, catalog, c => ({ ...c, config })))
+    return next(e)
+  })
+
+  // An instruction file the engine loaded itself: which, of what kind, why, and from which file. Handed on unchanged.
+  on('classic.InstructionsLoaded', async ($, e, next) => {
+    await quietly(async () => {
+      const file = lastTwo(e.file_path)
+      const entry = { file, kind: e.memory_type, reason: e.load_reason, ...(e.parent_file_path ? { parent: lastTwo(e.parent_file_path) } : {}) }
+      await update($, catalog, c => ((c.loaded ?? []).some(l => l.file === file) ? c : { ...c, loaded: [...(c.loaded ?? []), entry].slice(-40) }))
+    })
     return next(e)
   })
 

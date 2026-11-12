@@ -152,17 +152,22 @@ export function columnLines(catalog: Catalog, lit: Set<string>, width: number, r
   part('Skills / commando’s', catalog.commands, i => `skill:${i.name}`, i => i.source !== 'builtin', room, gone.skills, 'map, niet in lijst')
   part('Agents', catalog.agents, i => `agent:${i.name}`, () => true, room, gone.agents, 'bestand, niet aangeboden')
 
-  // Instruction files: every one that exists, and every one the session read; marked by whether it was read.
+  // Instruction files: what the engine loaded itself, what the session read with a tool, and what exists on disk
+  // without either. Loaded by the engine is `◆`, with why and, for an include, which file brought it in.
+  const loaded = catalog.loaded ?? []
   const cfgFiles = catalog.config?.files ?? []
-  const all = [...new Set([...cfgFiles, ...catalog.files])]
+  const all = [...new Set([...loaded.map(l => l.file), ...cfgFiles, ...catalog.files])]
   lines.push({ text: '', lit: false })
-  lines.push({ text: 'Instructies', lit: false, head: true })
+  lines.push({ text: fit(`Instructies${loaded.length ? `  (engine ${loaded.length})` : ''}`), lit: false, head: true })
   if (all.length === 0) lines.push({ text: '  nog niets', lit: false, dim: true })
-  for (const name of all.slice(0, Math.max(room, 4))) {
+  for (const name of all.slice(0, Math.max(room, 6))) {
     const on = lit.has(`file:${name}`)
     const read = catalog.files.includes(name)
-    lines.push({ text: item(on ? '▶' : read ? '✓' : ' ', name, read ? 'gelezen' : 'niet gelezen'), lit: on, dim: !on && read })
+    const by = loaded.find(l => l.file === name)
+    const why = [by ? `geladen ${by.kind} ${by.reason}${by.parent ? ` ← ${by.parent}` : ''}` : '', read ? 'gelezen' : ''].filter(Boolean).join(' + ') || 'niet geladen, niet gelezen'
+    lines.push({ text: item(on ? '▶' : by ? '◆' : read ? '✓' : ' ', name, why), lit: on, dim: !on && (by !== undefined || read), warn: !on && !by && !read })
   }
+  if (all.length > Math.max(room, 6)) lines.push({ text: `  +${all.length - Math.max(room, 6)}`, lit: false, dim: true })
 
   // Hooks as the settings declare them: the script each runs, and whether it is there.
   const hooks = catalog.config?.hooks ?? []

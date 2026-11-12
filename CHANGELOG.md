@@ -4,6 +4,11 @@ What changed in each version of lot-map, newest first. To get a new version, see
 
 
 
+
+## 0.5.2-mq.3 (fork zeeneddie, branch feat/werkinzicht)
+
+- Instruction files the engine loads itself are shown as loaded (`◆`), from `classic.InstructionsLoaded`: the kind (User, Project, Local, Managed), why (session start, include, nested, path match, compaction) and, for an include, the file that brought it in. A file on disk that was neither loaded nor read is marked in the warning colour. This replaces the misleading "not read" for CLAUDE.md.
+- The side column is 48 columns wide.
 ## 0.5.2-mq.2 (fork zeeneddie, branch feat/werkinzicht)
 
 - Layer 1, the configuration on disk, beside what is loaded: MCP servers from `~/.claude.json` (top level and this folder's project) and `.mcp.json`; agent files in `~/.claude/agents` and `.claude/agents` (one folder down); skill folders with a `SKILL.md`; hooks from the merged settings with the script each runs and whether it is there; instruction and memory files that exist.
