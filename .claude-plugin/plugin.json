@@ -1,6 +1,6 @@
 {
   "name": "lot-map",
-  "version": "0.5.2-mq.4",
+  "version": "0.5.2-mq.5",
   "description": "A live map beside the chat: memory, files, shell, web, model, agents, skills and hooks light up as they are used",
   "author": {
     "name": "Aleksei Volodin",

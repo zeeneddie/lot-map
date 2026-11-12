@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Board, Catalog, Config, Entry, StationId, Status } from '../types'
-import { EMPTY_CATALOG, WHY_TOOLS, whyOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
+import { EMPTY_CATALOG, WHY_TOOLS, whyOf, skillFileOf, activeRefs, columnLines, frontName, fromCommands, fromTools, hookDecls, instructionPaths, lastTwo, mcpNames, refOf, sameCatalog, steeringFile } from './catalog'
 import { STATIONS, classify, clean, describeNow, drawMap, firstLine, foldRows, formatMs, memoryIds, setupFrom, shortModel, taskNotice, taskOf } from './map'
 import type { Setup } from './map'
 
@@ -390,6 +390,13 @@ export const register: Register = (on, options) => {
       if (file !== undefined) {
         await update($, catalog, c => (c.files.includes(file) ? c : { ...c, files: [...c.files, file].slice(-24) }))
       }
+      const fromSkill = e.tool === 'Read' && typeof input.file_path === 'string' ? skillFileOf(input.file_path) : undefined
+      if (fromSkill !== undefined) {
+        await update($, catalog, c => {
+          const had = c.chain?.[fromSkill.skill] ?? []
+          return had.includes(fromSkill.file) ? c : { ...c, chain: { ...c.chain, [fromSkill.skill]: [...had, fromSkill.file].slice(-12) } }
+        })
+      }
       const why = e.tool_use_id !== undefined ? reasons.get(e.tool_use_id) : undefined
       if (e.tool_use_id !== undefined) reasons.delete(e.tool_use_id)
       return begin($, { ...seen, ...(ref !== undefined ? { ref } : {}), ...(why !== undefined ? { why } : {}), ...(e.agentId === undefined ? { from: 'core' as const } : { from: 'agents' as const, agentId: e.agentId }) })
@@ -416,12 +423,12 @@ export const register: Register = (on, options) => {
     const endedAt = (await quietly(() => $.clock.now())) ?? startedAt
     if (decided.deny !== undefined) {
       if (e.tool_use_id !== undefined) refused.add(e.tool_use_id)
-      await begin($, { station: 'hooks', label: (setup.hookReasons ? firstLine(decided.deny) : '') || t.stopped(e.tool), status: 'block', startedAt })
+      await begin($, { station: 'hooks', label: (setup.hookReasons ? firstLine(decided.deny) : '') || t.stopped(e.tool), status: 'block', startedAt, ref: `hook:PreToolUse:${e.tool}` })
     } else if (decided.ask !== undefined) {
-      await begin($, { station: 'hooks', label: t.askedPermission(e.tool), status: 'ok', startedAt, endedAt })
+      await begin($, { station: 'hooks', label: t.askedPermission(e.tool), status: 'ok', startedAt, endedAt, ref: `hook:PreToolUse:${e.tool}` })
     } else if (endedAt - startedAt >= 400) {
       // A check that took a moment is worth seeing; the instant ones are not.
-      await begin($, { station: 'hooks', label: t.checkBefore(e.tool), status: 'ok', startedAt, endedAt })
+      await begin($, { station: 'hooks', label: t.checkBefore(e.tool), status: 'ok', startedAt, endedAt, ref: `hook:PreToolUse:${e.tool}` })
     }
     return decided
   })

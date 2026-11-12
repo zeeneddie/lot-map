@@ -1,6 +1,6 @@
 // The loaded column: what the session has at hand, and which of it the work in the feed is using.
 // Everything here is read from the engine's own lists or from the calls the map already sees; no model is asked.
-import type { Catalog, Entry, Item } from '../types'
+import type { Catalog, Entry, HookDecl, Item } from '../types'
 
 import { clean } from './map'
 
@@ -169,14 +169,32 @@ export function columnLines(catalog: Catalog, lit: Set<string>, width: number, r
   }
   if (all.length > Math.max(room, 6)) lines.push({ text: `  +${all.length - Math.max(room, 6)}`, lit: false, dim: true })
 
+  // What a skill made the session read from its own folder.
+  const chain = Object.entries(catalog.chain ?? {})
+  if (chain.length > 0) {
+    lines.push({ text: '', lit: false })
+    lines.push({ text: 'Keten (skill → bestanden)', lit: false, head: true })
+    for (const [skill, files] of chain.slice(-Math.max(room, 3))) {
+      const on = lit.has(`skill:${skill}`)
+      lines.push({ text: item(on ? '▶' : ' ', skill, `${files.length} gelezen`), lit: on, dim: !on })
+      for (const file of files.slice(-3)) lines.push({ text: cut(`    → ${clean(file, max)}`), lit: false, dim: true })
+    }
+  }
+
   // Hooks as the settings declare them: the script each runs, and whether it is there.
   const hooks = catalog.config?.hooks ?? []
   if (hooks.length > 0) {
     lines.push({ text: '', lit: false })
     lines.push({ text: fit(`Hooks (settings) ${hooks.length}`), lit: false, head: true })
-    const sorted = [...hooks].sort((a, b) => Number(b.missing) - Number(a.missing))
+    // A PreToolUse hook that refused or took a moment lights the hooks whose matcher fits that tool: candidates,
+    // because the map sees that a hook acted, not which script it was.
+    const hookTools = [...lit].filter(r => r.startsWith('hook:PreToolUse:')).map(r => r.slice('hook:PreToolUse:'.length))
+    const fits = (h: HookDecl): boolean => h.event === 'PreToolUse' && hookTools.some(tool => matcherFits(h.matcher, tool))
+    const sorted = [...hooks].sort((a, b) => Number(fits(b)) - Number(fits(a)) || Number(b.missing) - Number(a.missing))
     for (const h of sorted.slice(0, Math.max(room, 4))) {
-      lines.push({ text: item(h.missing ? '✕' : ' ', `${h.event}${h.matcher ? ` ${h.matcher}` : ''}`, h.missing ? `${h.script} ontbreekt` : h.script), lit: false, warn: h.missing, dim: !h.missing })
+      const on = fits(h)
+      const what = h.missing ? `${h.script} ontbreekt` : on ? `${h.script} (kandidaat)` : h.script
+      lines.push({ text: item(on ? '▶' : h.missing ? '✕' : ' ', `${h.event}${h.matcher ? ` ${h.matcher}` : ''}`, what), lit: on, warn: h.missing && !on, dim: !h.missing && !on })
     }
     if (hooks.length > Math.max(room, 4)) lines.push({ text: `  +${hooks.length - Math.max(room, 4)}`, lit: false, dim: true })
   }
@@ -259,6 +277,24 @@ export function tail(text: string, max = 240): string {
 export function whyOf(thinking: string, text: string, max = 240): string | undefined {
   const said = tail(text, max)
   const thought = tail(thinking, max)
-  const parts = [said ? `zei: ${said}` : '', thought ? `dacht: ${thought}` : ''].filter(Boolean)
+  const parts = [said ? `zei: ${said}` : '', thought ? `samenvatting denken: ${thought}` : ''].filter(Boolean)
   return parts.length ? parts.join(' · ') : undefined
+}
+
+// ---- the chain: which file or script the work pulled in --------------------------------------------------
+
+/** The skill whose own folder a read file lies in, and the file's path inside that folder. */
+export function skillFileOf(path: string): { skill: string; file: string } | undefined {
+  const m = /\/skills\/([^/]+)\/(.+)$/.exec(path.replace(/\\/g, '/'))
+  return m?.[1] && m[2] ? { skill: m[1], file: m[2] } : undefined
+}
+
+/** Whether a hook's matcher (a tool name, `A|B`, a regex, or empty for all) applies to a tool. */
+export function matcherFits(matcher: string, tool: string): boolean {
+  if (matcher === '' || matcher === '*') return true
+  try {
+    return new RegExp(`^(?:${matcher})$`).test(tool)
+  } catch {
+    return matcher.split('|').includes(tool)
+  }
 }

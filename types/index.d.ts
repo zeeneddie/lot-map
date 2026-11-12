@@ -61,6 +61,8 @@ export type Catalog = {
   config?: Config
   /** Instruction files the engine itself loaded (InstructionsLoaded): why, and which file brought them in. */
   loaded?: LoadedFile[]
+  /** Files read from a skill's own folder, by skill: what a skill made the session read. */
+  chain?: Record<string, string[]>
 }
 
 export type LoadedFile = { file: string; kind: string; reason: string; parent?: string }

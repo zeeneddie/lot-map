@@ -4,7 +4,7 @@ import type { Board } from '../types'
 import type { Entry } from '../types'
 import { COLOR_NAMES, TRAIL_FADE_MS, TRAIL_HOLD_MS, classify, clean, drawMap, firstLine, foldRows, formatMs, memoryIds, routeOf, setupFrom, taskNotice, taskOf } from './map'
 import { stringsFor } from './text'
-import { EMPTY_CATALOG, columnLines, frontName, hookDecls, mcpNames, missing, scriptOf, tail, whyOf } from './catalog'
+import { EMPTY_CATALOG, columnLines, frontName, hookDecls, matcherFits, mcpNames, missing, scriptOf, skillFileOf, tail, whyOf } from './catalog'
 
 const PANE = {
   plugin: 'lot-map',
@@ -862,7 +862,28 @@ test('the reason before a skill or agent call is the model own words, cut short,
   expect(tail(long, 50).length).toBeLessThanOrEqual(51)
   expect(tail(long, 50).startsWith('…')).toBe(true)
   expect(whyOf('', '')).toBeUndefined()
-  expect(whyOf('ik moet de skill laden', '')).toBe('dacht: ik moet de skill laden')
+  expect(whyOf('ik moet de skill laden', '')).toBe('samenvatting denken: ik moet de skill laden')
   expect(whyOf('', 'Ik start een Explore-agent.')).toBe('zei: Ik start een Explore-agent.')
-  expect(whyOf('denk', 'zeg')).toBe('zei: zeg · dacht: denk')
+  expect(whyOf('denk', 'zeg')).toBe('zei: zeg · samenvatting denken: denk')
+})
+
+test('the chain: files a skill made the session read, and the hook scripts that fit a tool a hook acted on', () => {
+  expect(skillFileOf('/w/p/.claude/skills/repo-analyse/SKILL.md')).toEqual({ skill: 'repo-analyse', file: 'SKILL.md' })
+  expect(skillFileOf('/h/.claude/skills/x/refs/a.md')).toEqual({ skill: 'x', file: 'refs/a.md' })
+  expect(skillFileOf('/w/p/README.md')).toBeUndefined()
+  expect(matcherFits('Edit|Write|Bash', 'Bash')).toBe(true)
+  expect(matcherFits('Edit|Write|MultiEdit|NotebookEdit', 'Bash')).toBe(false)
+  expect(matcherFits('', 'Read')).toBe(true)
+  expect(matcherFits('mcp__.*', 'mcp__x__y')).toBe(true)
+
+  const config = { mcp: [], agents: [], skills: [], files: [], hooks: [
+    { event: 'PreToolUse', matcher: 'Edit|Write|MultiEdit|NotebookEdit', script: 'hooks/branch-guard.sh', missing: false },
+    { event: 'PreToolUse', matcher: 'Edit|Write|Bash', script: 'bin/bord-start-guard.sh', missing: false },
+  ] }
+  const c = { ...EMPTY_CATALOG, config, chain: { 'repo-analyse': ['SKILL.md'] } }
+  const text = columnLines(c, new Set(['hook:PreToolUse:Bash', 'skill:repo-analyse']), 70, 80).map(l => l.text)
+  expect(text).toContain('▶ PreToolUse Edit|Write|Bash · bin/bord-start-guard.sh (kandidaat)')
+  expect(text).toContain('  PreToolUse Edit|Write|MultiEdit|NotebookEdit · hooks/branch-guard.sh')
+  expect(text).toContain('▶ repo-analyse · 1 gelezen')
+  expect(text).toContain('    → SKILL.md')
 })

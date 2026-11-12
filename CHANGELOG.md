@@ -6,6 +6,12 @@ What changed in each version of lot-map, newest first. To get a new version, see
 
 
 
+
+## 0.5.2-mq.5 (fork zeeneddie, branch feat/werkinzicht)
+
+- Layer 3, the chain: a section **Keten (skill → bestanden)** lists, per skill, the files read from that skill's own folder.
+- A PreToolUse hook that refused, asked or took a moment lights the hooks in the settings whose matcher fits that tool, marked `(kandidaat)`: the map sees that a hook acted, not which script it was.
+- The reason text says `samenvatting denken`, not `dacht`: measured on 2026-11-12, thinking comes through the stream as the summary Claude Code itself shows.
 ## 0.5.2-mq.4 (fork zeeneddie, branch feat/werkinzicht)
 
 - Layer 4, why: under a Skill, Agent or Workflow row the feed shows what the model wrote and thought just before the call (`↳ waarom (eigen woorden model)`, the last ±240 characters of each). Read from the `turn.step` stream, which is handed on chunk for chunk. It is the model's own account, not proof of cause, and labelled so.
